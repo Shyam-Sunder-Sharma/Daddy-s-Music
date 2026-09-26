@@ -965,3 +965,331 @@ body.gate-active .app {
 .user-chip .btn-link-danger:hover {
   text-decoration: underline;
 }
+
+/* Action buttons for Favorites & Playlists */
+.view-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: transform 0.15s, opacity 0.15s;
+}
+
+.action-btn:hover {
+  transform: scale(1.02);
+  opacity: 0.92;
+}
+
+.action-btn.play-all {
+  background: var(--brand);
+  color: #000;
+}
+
+.action-btn.shuffle-play {
+  background: var(--bg-card);
+  color: var(--text-main);
+  border: 1px solid var(--border);
+}
+
+.action-btn.shuffle-play:hover {
+  background: var(--bg-card-hover);
+}
+
+.icon-btn.remove-track:hover {
+  color: #ef4444; /* Red highlight on hover */
+}
+
+/* =========================================================
+   Utility, Lyrics & Equalizer Styles
+========================================================= */
+.hidden {
+  display: none !important;
+}
+
+/* Extra Player Buttons (Lyrics & EQ) */
+.icon-btn-extra {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #a1a1aa);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 50%;
+  transition: color 0.2s, transform 0.1s;
+}
+
+.icon-btn-extra:hover {
+  color: var(--text-main, #ffffff);
+  transform: scale(1.08);
+}
+
+.icon-btn-extra:active {
+  transform: scale(0.95);
+}
+
+.close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #a1a1aa);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  color: #ffffff;
+}
+
+/* 1. Time-Synced Scrolling Lyrics */
+.lyrics-modal {
+  position: fixed;
+  top: 40px;
+  bottom: 100px;
+  right: 24px;
+  width: 400px;
+  max-width: calc(100vw - 48px);
+  background: rgba(18, 18, 20, 0.95);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border, #27272a);
+  border-radius: 16px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  z-index: 999;
+  overflow: hidden;
+}
+
+.lyrics-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle, #24242e);
+  background: var(--bg-card, #141418);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Allow text group to shrink and truncate cleanly without pushing controls */
+.lyrics-track-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.lyrics-track-info h3 {
+  font-size: 1.05rem;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+}
+
+.lyrics-track-info p {
+  font-size: 0.8rem;
+  color: var(--text-muted, #a1a1aa);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+/* Offset Controls: locked size, uniform font, never squeezed */
+.lyrics-sync-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.sync-adj-btn {
+  background: #27272a;
+  border: 1px solid #3f3f46;
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.sync-adj-btn:hover {
+  background: #3f3f46;
+  border-color: #facc15;
+}
+
+#lyricOffsetDisplay {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #facc15;
+  font-family: monospace;
+  min-width: 44px;
+  text-align: center;
+}
+
+/* Close Button: fixed and always visible */
+.lyrics-header .close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #a1a1aa);
+  font-size: 1.25rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+
+.lyrics-header .close-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.lyrics-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 80px 24px;
+  scroll-behavior: smooth;
+  text-align: center;
+}
+
+.lyrics-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.lyrics-container::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 3px;
+}
+
+.lyric-line {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.3);
+  margin: 22px 0;
+  transition: all 0.25s cubic-bezier(0.2, 0, 0, 1);
+  cursor: pointer;
+  user-select: none;
+}
+
+.lyric-line:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.lyric-line.active {
+  color: #ffffff;
+  font-size: 1.45rem;
+  transform: scale(1.05);
+  text-shadow: 0 0 16px rgba(30, 215, 96, 0.4);
+}
+
+.lyrics-status {
+  color: var(--text-muted, #71717a);
+  font-size: 0.95rem;
+  margin-top: 40px;
+}
+
+/* 2. Web Audio API Equalizer */
+.eq-modal {
+  position: fixed;
+  bottom: 100px;
+  right: 60px;
+  width: 360px;
+  max-width: calc(100vw - 40px);
+  background: var(--bg-card, #18181b);
+  border: 1px solid var(--border, #27272a);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.75);
+  z-index: 1000;
+}
+
+.eq-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.eq-header h3 {
+  font-size: 1rem;
+  color: #ffffff;
+}
+
+.eq-presets {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.eq-presets select {
+  background: var(--bg-hover, #27272a);
+  border: 1px solid #3f3f46;
+  color: #ffffff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  outline: none;
+  font-size: 0.85rem;
+}
+
+.eq-sliders {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 160px;
+  padding: 0 10px;
+}
+
+.eq-band {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+}
+
+.eq-val {
+  font-size: 0.7rem;
+  color: var(--accent, #1ed760);
+  font-weight: 600;
+  min-height: 14px;
+}
+
+.eq-label {
+  font-size: 0.75rem;
+  color: var(--text-muted, #a1a1aa);
+}
+
+.eq-band input[type="range"] {
+  -webkit-appearance: slider-vertical;
+  appearance: slider-vertical;
+  writing-mode: bt-lr;
+  width: 8px;
+  height: 105px;
+  cursor: pointer;
+  accent-color: var(--accent, #1ed760);
+}

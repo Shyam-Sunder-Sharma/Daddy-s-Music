@@ -19,7 +19,7 @@ init_auth_db()
 
 DB_NAME = "music.db"
 
-# In-Memory Stream Cache
+# In-Memory Stream Cache: { track_id: (stream_url, timestamp) }
 STREAM_CACHE = {}
 CACHE_TTL = 3600 * 4  # 4 hours
 
@@ -81,12 +81,13 @@ def get_db():
 def upsert_track(cursor, track):
     if not track or 'id' not in track:
         return
+    # Check both 'dur' and 'duration' keys
+    duration = track.get('dur') or track.get('duration') or 0
     cursor.execute('''
         INSERT OR REPLACE INTO tracks (id, title, artist, thumbnail, duration)
         VALUES (?, ?, ?, ?, ?)
-    ''', (track['id'], track.get('title'), track.get('artist'), track.get('thumbnail'), track.get('dur', 0)))
+    ''', (track['id'], track.get('title'), track.get('artist'), track.get('thumbnail'), duration))
 
-# ----------------- Authenticated Sync Endpoints -----------------
 @app.route('/api/sync/load', methods=['GET'])
 @require_auth
 def sync_load():
@@ -107,7 +108,12 @@ def sync_load():
     pl_rows = cursor.fetchall()
 
     playlists = []
-    tracks_cache = {row['id']: dict(row) for row in fav_rows}
+    tracks_cache = {}
+
+    for row in fav_rows:
+        d = dict(row)
+        d['dur'] = d.get('duration') or 0  # Normalize for frontend
+        tracks_cache[row['id']] = d
 
     for pl in pl_rows:
         cursor.execute('''
@@ -120,7 +126,9 @@ def sync_load():
         t_ids = []
         for tr in pl_track_rows:
             t_ids.append(tr['id'])
-            tracks_cache[tr['id']] = dict(tr)
+            td = dict(tr)
+            td['dur'] = td.get('duration') or 0  # Normalize for frontend
+            tracks_cache[tr['id']] = td
 
         playlists.append({
             'id': pl['id'],
@@ -205,15 +213,12 @@ def search_tracks():
     return jsonify([])
 
 # ----------------- Stream Extractor & Proxy -----------------
+# Android & iOS mobile client formats don't apply aggressive web player throttling
+# ----------------- Stream Extractor & Proxy -----------------
 YDL_STREAM_OPTS = {
-    'format': 'bestaudio[ext=m4a]/bestaudio/best',
+    'format': 'bestaudio/best',
     'noplaylist': True,
     'quiet': True,
-    'extractor_args': {
-        'youtube': {
-            'player_client': ['android', 'web_creator']
-        }
-    }
 }
 
 def resolve_via_piped(query_target):
@@ -245,10 +250,18 @@ def resolve_direct_stream(target_query, track_id):
             search_info = ydl.extract_info(f"ytsearch1:{target_query}", download=False)
             if 'entries' in search_info and len(search_info['entries']) > 0:
                 entry = search_info['entries'][0]
-                stream_url = entry.get('url')
-                if not stream_url and 'formats' in entry:
-                    af = [f for f in entry['formats'] if f.get('vcodec') == 'none' and f.get('url')]
-                    stream_url = af[-1].get('url') if af else entry['formats'][-1].get('url')
+                stream_url = None
+
+                if 'formats' in entry:
+                    audio_formats = [
+                        f for f in entry['formats']
+                        if f.get('vcodec') == 'none' and f.get('url')
+                    ]
+                    if audio_formats:
+                        stream_url = audio_formats[-1].get('url')
+
+                if not stream_url:
+                    stream_url = entry.get('url')
 
                 if stream_url:
                     STREAM_CACHE[track_id] = (stream_url, now)
@@ -277,7 +290,7 @@ def get_stream():
             return jsonify({'error': 'Stream extraction failed'}), 500
 
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
             'Referer': 'https://www.youtube.com/'
         }
 
@@ -285,15 +298,21 @@ def get_stream():
         if range_header:
             headers['Range'] = range_header
 
-        req = requests.get(stream_url, headers=headers, stream=True, timeout=12)
+        req = requests.get(stream_url, headers=headers, stream=True, timeout=15)
 
         def generate():
-            for chunk in req.iter_content(chunk_size=1024 * 64):
-                if chunk:
-                    yield chunk
+            try:
+                for chunk in req.iter_content(chunk_size=1024 * 64):
+                    if chunk:
+                        yield chunk
+            except Exception as e:
+                print("Stream proxy error:", e)
+
+        # Use the actual format content type (audio/webm or audio/mp4) returned by the CDN
+        content_type = req.headers.get('Content-Type', 'audio/webm')
 
         resp_headers = {
-            'Content-Type': req.headers.get('Content-Type', 'audio/mp4'),
+            'Content-Type': content_type,
             'Accept-Ranges': 'bytes'
         }
         if 'Content-Range' in req.headers:
