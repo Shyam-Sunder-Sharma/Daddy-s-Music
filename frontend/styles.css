@@ -228,38 +228,9 @@ body {
   box-shadow: 0 0 0 3px var(--brand-glow);
 }
 
-/* Auth Bar in Top Row */
 .auth-bar {
   display: flex;
   align-items: center;
-}
-
-.auth-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.user-label {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.user-label strong {
-  color: var(--text-main);
-}
-
-.btn-link-danger {
-  background: transparent;
-  border: none;
-  color: var(--danger);
-  font-size: 0.85rem;
-  cursor: pointer;
-  font-weight: 500;
-}
-
-.btn-link-danger:hover {
-  text-decoration: underline;
 }
 
 .section-title {
@@ -658,21 +629,6 @@ body {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
 }
 
-.modal-close {
-  position: absolute;
-  top: 14px;
-  right: 16px;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 1.4rem;
-  cursor: pointer;
-}
-
-.modal-close:hover {
-  color: #fff;
-}
-
 .modal-box h3 {
   font-size: 1.2rem;
   margin-bottom: 4px;
@@ -705,41 +661,6 @@ body {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 18px;
-}
-
-.modal-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.btn-block {
-  width: 100%;
-  padding: 10px;
-  margin-top: 4px;
-}
-
-.error-msg {
-  color: var(--danger);
-  font-size: 0.82rem;
-}
-
-.modal-toggle-row {
-  margin-top: 16px;
-  font-size: 0.85rem;
-  text-align: center;
-  color: var(--text-muted);
-}
-
-.toggle-link {
-  color: var(--brand);
-  text-decoration: none;
-  font-weight: 600;
-  margin-left: 4px;
-}
-
-.toggle-link:hover {
-  text-decoration: underline;
 }
 
 /* Dropdown Menu */
@@ -789,4 +710,258 @@ body {
   color: var(--text-muted);
   padding: 6px 10px;
   font-style: italic;
+}
+
+/* ============================================================
+   AUTH GATE — Full-Screen Sign-In & Sign-Up Overlay
+   ============================================================ */
+body.gate-active .app {
+  display: none;
+}
+
+.auth-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: radial-gradient(circle at 30% 20%, rgba(34, 197, 94, 0.08), transparent 60%),
+              var(--bg-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px 28px 28px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  animation: authRise 0.35s ease;
+}
+
+@keyframes authRise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.auth-brand {
+  font-family: 'Fraunces', serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #fff;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.auth-brand span {
+  display: block;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.78rem;
+  color: var(--brand);
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  margin-top: 3px;
+}
+
+.auth-tabs {
+  display: flex;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 22px;
+}
+
+.auth-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 9px 0;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.auth-tab.active {
+  background: var(--brand);
+  color: #000;
+}
+
+.auth-field {
+  margin-bottom: 16px;
+}
+
+.auth-field label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.auth-field input {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 11px 12px;
+  color: #fff;
+  font-size: 0.92rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.auth-field input:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-glow);
+}
+
+.pass-wrap {
+  position: relative;
+}
+
+.pass-wrap input {
+  padding-right: 40px;
+}
+
+.pass-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+}
+
+.pass-toggle:hover {
+  color: var(--text-main);
+}
+
+.field-msg {
+  font-size: 0.75rem;
+  margin-top: 6px;
+  min-height: 14px;
+}
+
+.field-msg.ok { color: var(--brand); }
+.field-msg.bad { color: var(--danger); }
+.field-msg.checking { color: var(--text-muted); }
+
+.strength-meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.strength-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.strength-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 2px;
+  transition: width 0.2s ease, background 0.2s ease;
+  background: var(--danger);
+}
+
+.strength-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  width: 52px;
+  text-align: right;
+}
+
+.auth-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--danger);
+  font-size: 0.82rem;
+  padding: 9px 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.auth-submit {
+  width: 100%;
+  background: var(--brand);
+  color: #000;
+  border: none;
+  padding: 12px;
+  border-radius: 9999px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.auth-submit:hover {
+  opacity: 0.9;
+}
+
+.auth-submit:active {
+  transform: scale(0.99);
+}
+
+.auth-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.auth-switch {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 18px;
+}
+
+.auth-switch a {
+  color: var(--brand);
+  text-decoration: none;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.auth-switch a:hover {
+  text-decoration: underline;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.user-chip strong {
+  color: var(--text-main);
+}
+
+.user-chip .btn-link-danger {
+  background: transparent;
+  border: none;
+  color: var(--danger);
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.user-chip .btn-link-danger:hover {
+  text-decoration: underline;
 }

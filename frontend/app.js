@@ -8,7 +8,7 @@
   var searchCache = new Map();
 
   var state = {
-    user: loadJSON("phantom_user", null),
+    user: null,
     favorites: loadJSON("daddy_favorites", []),
     playlists: loadJSON("daddy_playlists", []),
     queue: [],
@@ -90,20 +90,19 @@
   var searchTimeout = null;
   var activeController = null;
 
-  // ---------- Backend Cloud Sync ----------
+  // ---------- Backend Cloud Sync with JWT Bearer Token ----------
   async function syncToServer() {
-    if (!state.user) return;
+    if (!state.user || typeof window.authFetch !== "function") return;
     try {
       var trackCacheObj = {};
       TRACK_MAP.forEach(function (val, key) {
         trackCacheObj[key] = val;
       });
 
-      await fetch(`${API_BASE}/sync/save`, {
+      await window.authFetch(`${API_BASE}/sync/save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: state.user.id,
           favorites: state.favorites,
           playlists: state.playlists,
           trackCache: trackCacheObj
@@ -115,9 +114,9 @@
   }
 
   async function loadUserSync() {
-    if (!state.user) return;
+    if (!state.user || typeof window.authFetch !== "function") return;
     try {
-      const res = await fetch(`${API_BASE}/sync/load?user_id=${state.user.id}`);
+      const res = await window.authFetch(`${API_BASE}/sync/load`);
       if (res.ok) {
         const data = await res.json();
         state.favorites = data.favorites || [];
@@ -680,100 +679,6 @@
     setView({ type: "playlist", id: pl.id });
   }
 
-  // ---------- Static In-App Auth Modal Handlers ----------
-  var authModal = document.getElementById("userAuthModal");
-  var authMode = "login";
-
-  function updateAuthBanner() {
-    var guest = document.getElementById("authGuest");
-    var userBox = document.getElementById("authUser");
-    var nameSpan = document.getElementById("authUsernameDisplay");
-    if (state.user) {
-      guest.style.display = "none";
-      userBox.style.display = "flex";
-      nameSpan.textContent = state.user.username;
-    } else {
-      guest.style.display = "flex";
-      userBox.style.display = "none";
-    }
-  }
-
-  function openAuth(mode) {
-    authMode = mode;
-    document.getElementById("authErrMsg").style.display = "none";
-    document.getElementById("authInputUser").value = "";
-    document.getElementById("authInputPass").value = "";
-    if (mode === "login") {
-      document.getElementById("authModalHeader").textContent = "Sign In";
-      document.getElementById("authModalSub").textContent = "Access your saved tracks across any session.";
-      document.getElementById("authToggleText").textContent = "Need an account?";
-      document.getElementById("authToggleLink").textContent = "Sign Up";
-    } else {
-      document.getElementById("authModalHeader").textContent = "Create Account";
-      document.getElementById("authModalSub").textContent = "Save playlists directly to your database.";
-      document.getElementById("authToggleText").textContent = "Already have an account?";
-      document.getElementById("authToggleLink").textContent = "Sign In";
-    }
-    authModal.style.display = "flex";
-  }
-
-  function setupAuthEvents() {
-    document.getElementById("btnNavLogin").addEventListener("click", () => openAuth("login"));
-    document.getElementById("btnNavRegister").addEventListener("click", () => openAuth("register"));
-    document.getElementById("authModalClose").addEventListener("click", () => {
-      authModal.style.display = "none";
-    });
-
-    document.getElementById("authToggleLink").addEventListener("click", (e) => {
-      e.preventDefault();
-      openAuth(authMode === "login" ? "register" : "login");
-    });
-
-    document.getElementById("btnNavLogout").addEventListener("click", () => {
-      state.user = null;
-      localStorage.removeItem("phantom_user");
-      updateAuthBanner();
-    });
-
-    document.getElementById("btnAuthSubmit").addEventListener("click", async () => {
-      var u = document.getElementById("authInputUser").value.trim();
-      var p = document.getElementById("authInputPass").value.trim();
-      var err = document.getElementById("authErrMsg");
-
-      if (!u || !p) {
-        err.textContent = "Please fill in all fields.";
-        err.style.display = "block";
-        return;
-      }
-
-      var ep = authMode === "login" ? "/auth/login" : "/auth/register";
-      try {
-        var res = await fetch(`${API_BASE}${ep}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: u, password: p })
-        });
-        var data = await res.json();
-        if (!res.ok) {
-          err.textContent = data.error || "Authentication error.";
-          err.style.display = "block";
-          return;
-        }
-
-        state.user = data.user;
-        saveJSON("phantom_user", data.user);
-        authModal.style.display = "none";
-        updateAuthBanner();
-        loadUserSync();
-      } catch (e) {
-        err.textContent = "Unable to contact auth backend.";
-        err.style.display = "block";
-      }
-    });
-
-    updateAuthBanner();
-  }
-
   // ---------- Audio Listeners ----------
   audioEngine.addEventListener("timeupdate", () => {
     if (!audioEngine.duration) return;
@@ -920,10 +825,13 @@
     }
   });
 
-  // ---------- Startup Initialization ----------
+  // ---------- Authenticated Lifecycle Handshake ----------
+  document.addEventListener("phantom:authenticated", function (e) {
+    state.user = e.detail.user;
+    loadUserSync();
+  });
+
   setupMediaSession();
-  setupAuthEvents();
-  if (state.user) loadUserSync();
   renderPlaylists();
   renderQueue();
   setView({ type: "browse" });

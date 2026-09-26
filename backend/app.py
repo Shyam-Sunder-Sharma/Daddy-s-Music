@@ -3,13 +3,19 @@ import time
 import threading
 import sqlite3
 import requests
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify, Response, g
 from flask_cors import CORS
-from werkzeug.security import generate_password_hash, check_password_hash
 import yt_dlp
+
+# Import the new standalone auth system
+from auth import auth_bp, init_auth_db, require_auth
 
 app = Flask(__name__)
 CORS(app)
+
+# Register authentication blueprint and initialize tables
+app.register_blueprint(auth_bp)
+init_auth_db()
 
 DB_NAME = "music.db"
 
@@ -26,13 +32,6 @@ FALLBACK_APIS = [
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL
-        )
-    ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tracks (
             id TEXT PRIMARY KEY,
@@ -87,52 +86,11 @@ def upsert_track(cursor, track):
         VALUES (?, ?, ?, ?, ?)
     ''', (track['id'], track.get('title'), track.get('artist'), track.get('thumbnail'), track.get('dur', 0)))
 
-# ----------------- Auth Endpoints -----------------
-@app.route('/api/auth/register', methods=['POST'])
-def register():
-    data = request.json or {}
-    username = data.get('username', '').strip().lower()
-    password = data.get('password', '').strip()
-
-    if not username or not password:
-        return jsonify({'error': 'Username and password required'}), 400
-
-    hashed_pw = generate_password_hash(password)
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, hashed_pw))
-        conn.commit()
-        user_id = cursor.lastrowid
-        return jsonify({'message': 'User registered', 'user': {'id': user_id, 'username': username}})
-    except sqlite3.IntegrityError:
-        return jsonify({'error': 'Username already taken'}), 409
-    finally:
-        conn.close()
-
-@app.route('/api/auth/login', methods=['POST'])
-def login():
-    data = request.json or {}
-    username = data.get('username', '').strip().lower()
-    password = data.get('password', '').strip()
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
-    user = cursor.fetchone()
-    conn.close()
-
-    if not user or not check_password_hash(user['password_hash'], password):
-        return jsonify({'error': 'Invalid credentials'}), 401
-
-    return jsonify({'message': 'Login successful', 'user': {'id': user['id'], 'username': user['username']}})
-
-# ----------------- Sync Endpoints -----------------
+# ----------------- Authenticated Sync Endpoints -----------------
 @app.route('/api/sync/load', methods=['GET'])
+@require_auth
 def sync_load():
-    user_id = request.args.get('user_id')
-    if not user_id:
-        return jsonify({'error': 'User ID required'}), 400
+    user_id = g.current_user['id']
 
     conn = get_db()
     cursor = conn.cursor()
@@ -174,11 +132,10 @@ def sync_load():
     return jsonify({'favorites': favorite_ids, 'playlists': playlists, 'trackCache': tracks_cache})
 
 @app.route('/api/sync/save', methods=['POST'])
+@require_auth
 def sync_save():
     data = request.json or {}
-    user_id = data.get('user_id')
-    if not user_id:
-        return jsonify({'error': 'User ID required'}), 400
+    user_id = g.current_user['id']
 
     conn = get_db()
     cursor = conn.cursor()
@@ -204,7 +161,7 @@ def sync_save():
     conn.close()
     return jsonify({'status': 'synced'})
 
-# ----------------- Lightning Fast Music Search (iTunes Engine) -----------------
+# ----------------- Fast Music Search (iTunes Engine) -----------------
 @app.route('/api/search', methods=['GET'])
 def search_tracks():
     query = request.args.get('q', '').strip()
@@ -212,7 +169,6 @@ def search_tracks():
         return jsonify([])
 
     try:
-        # iTunes API returns purely licensed music, ~300ms response, zero rate-limit blocks
         res = requests.get(
             "https://itunes.apple.com/search",
             params={
@@ -227,7 +183,6 @@ def search_tracks():
             data = res.json()
             tracks = []
             for item in data.get('results', []):
-                # Upgrade artwork to crisp 500x500 high-res
                 art = item.get('artworkUrl100', '')
                 high_res_art = art.replace('100x100bb', '500x500bb') if art else ''
                 
@@ -241,7 +196,6 @@ def search_tracks():
                     'album': item.get('collectionName', 'Single'),
                     'thumbnail': high_res_art,
                     'dur': int((item.get('trackTimeMillis') or 0) / 1000),
-                    # Target query passed for instant resolver
                     'queryTarget': f"{artist_name} - {track_title} audio"
                 })
             return jsonify(tracks)
@@ -286,10 +240,8 @@ def resolve_direct_stream(target_query, track_id):
         if now - timestamp < CACHE_TTL:
             return cached_url
 
-    # Attempt 1: yt-dlp search with Android client
     try:
         with yt_dlp.YoutubeDL(YDL_STREAM_OPTS) as ydl:
-            # Look up top result for exact song target
             search_info = ydl.extract_info(f"ytsearch1:{target_query}", download=False)
             if 'entries' in search_info and len(search_info['entries']) > 0:
                 entry = search_info['entries'][0]
@@ -304,7 +256,6 @@ def resolve_direct_stream(target_query, track_id):
     except Exception as e:
         print(f"Direct resolution warning ({e}), falling back...")
 
-    # Attempt 2: Piped API
     fallback_url = resolve_via_piped(target_query)
     if fallback_url:
         STREAM_CACHE[track_id] = (fallback_url, now)
