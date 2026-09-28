@@ -3,12 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#22c55e">
   <title>Daddy's Music — by Phantom</title>
   <link rel="icon" href="data:,">
+  <link rel="manifest" href="manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body class="gate-active">
 
@@ -60,6 +62,7 @@
     <div class="brand">Daddy's Music <span>by Phantom</span></div>
 
     <div class="nav-group">
+      <div class="nav-label">Library</div>
       <div class="nav-item active" data-view="browse">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
         Browse
@@ -67,6 +70,22 @@
       <div class="nav-item" data-view="favorites">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 20s-7-4.4-9.5-9A5.5 5.5 0 0112 5.5 5.5 5.5 0 0121.5 11c-2.5 4.6-9.5 9-9.5 9z"/></svg>
         Favorites
+      </div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">Smart Mixes</div>
+      <div class="nav-item" data-view="smart-top">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        Top Played
+      </div>
+      <div class="nav-item" data-view="smart-forgotten">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        Forgotten Favorites
+      </div>
+      <div class="nav-item" id="quickMixNavBtn" data-view="smart-quickmix">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4"/></svg>
+        Quick Mix
       </div>
     </div>
 
@@ -80,15 +99,27 @@
     </div>
   </nav>
 
-  <main class="main">
+  <main class="main" id="mainContent">
     <div class="top-row">
-      <!-- Standard div to prevent form submission side-effects -->
       <div class="search-wrap" role="search">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-        <input id="searchInput" type="text" placeholder="Search songs, artists, albums…" aria-label="Search library" autocomplete="off" spellcheck="false">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="searchInput" type="text" placeholder="Search songs, artists, or fuzzy filter (e.g. 'arjit channa')…" aria-label="Search library" autocomplete="off" spellcheck="false">
+        <button type="button" class="search-clear-btn hidden" id="searchClearBtn" aria-label="Clear search" title="Clear search">✕</button>
       </div>
 
-      <div class="auth-bar" id="authNavbarContainer"></div>
+      <div class="top-actions-right">
+        <button type="button" class="top-pill-btn" id="listenAlongBtn" title="Multi-User Listen Along Room">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+          <span id="listenAlongLabel">Listen Along</span>
+          <span id="roomBadge" class="room-live-dot hidden"></span>
+        </button>
+
+        <button type="button" class="top-icon-btn" id="cmdPaletteBtn" title="Command Palette & Keyboard Shortcuts (Ctrl+K)" aria-label="Command Palette">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h2M11 9h2M15 9h2M7 13h10"/></svg>
+        </button>
+
+        <div class="auth-bar" id="authNavbarContainer"></div>
+      </div>
     </div>
 
     <h1 class="section-title" id="viewTitle">Browse</h1>
@@ -107,21 +138,33 @@
   </main>
 
   <aside class="queue" aria-label="Playback queue">
-    <h2>Up next</h2>
-    <p class="hint">Tracks queued after the current song.</p>
+    <div class="queue-header-row">
+      <div>
+        <h2>Up next</h2>
+        <p class="hint">Drag tracks (⋮⋮) to reorder.</p>
+      </div>
+      <button type="button" class="nav-mini-btn" id="clearQueueBtn" title="Clear queue">Clear</button>
+    </div>
     <div id="queueContainer"></div>
   </aside>
 
-  <footer class="player" aria-label="Player controls">
+  <footer class="player" id="playerBar" aria-label="Player controls">
     <div class="p-now" id="playerNow">
-      <img class="cover" id="nowCover" src="" alt="Album Art" style="display:none; object-fit:cover;" />
-      <div class="t-meta">
-        <div class="t-title" id="nowTitle">Nothing playing</div>
-        <div class="t-artist" id="nowArtist">Pick a track to start</div>
+      <div class="p-now-clickable" id="nowTrackClickArea" title="Click to open YouTube Music Video">
+        <img class="cover" id="nowCover" crossorigin="anonymous" src="" alt="Album Art" style="display:none; object-fit:cover;" />
+        <div class="t-meta">
+          <div class="t-title" id="nowTitle">Nothing playing</div>
+          <div class="t-artist" id="nowArtist">Pick a track to start</div>
+        </div>
       </div>
-      <button type="button" class="icon-btn fav" id="nowFav" aria-label="Favorite current track">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20s-7-4.4-9.5-9A5.5 5.5 0 0112 5.5 5.5 5.5 0 0121.5 11c-2.5 4.6-9.5 9-9.5 9z"/></svg>
-      </button>
+      <div class="p-now-actions">
+        <button type="button" class="icon-btn fav" id="nowFav" aria-label="Favorite current track" title="Favorite (F)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20s-7-4.4-9.5-9A5.5 5.5 0 0112 5.5 5.5 5.5 0 0121.5 11c-2.5 4.6-9.5 9-9.5 9z"/></svg>
+        </button>
+        <button type="button" class="icon-btn" id="nowAddPlaylistBtn" aria-label="Add current track to playlist" title="Add to Playlist / Queue">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
     </div>
 
     <div class="p-controls">
@@ -129,13 +172,13 @@
         <button type="button" class="toggle" id="shuffleBtn" aria-label="Shuffle" title="Shuffle">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M4 4l5 5"/></svg>
         </button>
-        <button type="button" id="prevBtn" aria-label="Previous track">
+        <button type="button" id="prevBtn" aria-label="Previous track" title="Previous (P)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14l-11-7z"/></svg>
         </button>
-        <button type="button" class="play-btn" id="playBtn" aria-label="Play">
+        <button type="button" class="play-btn" id="playBtn" aria-label="Play" title="Play / Pause (Space)">
           <svg id="playIcon" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
         </button>
-        <button type="button" id="nextBtn" aria-label="Next track">
+        <button type="button" id="nextBtn" aria-label="Next track" title="Next (N)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg>
         </button>
         <button type="button" class="toggle" id="repeatBtn" aria-label="Repeat" title="Repeat">
@@ -152,11 +195,39 @@
     </div>
 
     <div class="p-extra">
-      <button type="button" class="icon-btn-extra" id="lyricsBtn" aria-label="Toggle Lyrics" title="Lyrics" onclick="toggleLyricsModal()">
+      <canvas id="playerVisualizer" class="player-visualizer" width="108" height="30" title="Real-Time Visualizer — Click to cycle mode (Bars / Spectrum / Waveform)"></canvas>
+
+      <button type="button" class="pill-btn-extra" id="speedBtn" title="Playback Speed (Pitch-Preserved) — Click to cycle">1.0×</button>
+
+      <div class="sleep-wrap">
+        <button type="button" class="icon-btn-extra" id="sleepTimerBtn" aria-label="Sleep Timer" title="Sleep Timer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+          <span id="sleepTimerBadge" class="sleep-badge hidden"></span>
+        </button>
+        <div id="sleepTimerMenu" class="popover-menu hidden">
+          <div class="popover-title">Sleep Timer</div>
+          <button type="button" class="popover-option" data-sleep="0">Off</button>
+          <button type="button" class="popover-option" data-sleep="15">15 minutes</button>
+          <button type="button" class="popover-option" data-sleep="30">30 minutes</button>
+          <button type="button" class="popover-option" data-sleep="45">45 minutes</button>
+          <button type="button" class="popover-option" data-sleep="eot">End of Track</button>
+        </div>
+      </div>
+
+      <button type="button" class="icon-btn-extra" id="videoToggleBtn" aria-label="YouTube Music Video" title="Watch YouTube Music Video">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="15" height="14" rx="2"/><path d="M17 9l5-3v12l-5-3v-6z"/></svg>
+      </button>
+
+      <button type="button" class="icon-btn-extra" id="lyricsBtn" aria-label="Toggle Lyrics" title="Synced Lyrics" onclick="toggleLyricsModal()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
       </button>
-      <button type="button" class="icon-btn-extra" id="eqBtn" aria-label="Audio Equalizer" title="Equalizer" onclick="toggleEqModal()">
+
+      <button type="button" class="icon-btn-extra" id="eqBtn" aria-label="Studio & Equalizer" title="Studio Audio & Equalizer (Crossfade / ReplayGain)" onclick="toggleEqModal()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 20h4V4h-4v16zm-6 0h4v-8H4v8zM16 9v11h4V9h-4z"/></svg>
+      </button>
+
+      <button type="button" class="icon-btn-extra" id="pipBtn" aria-label="Mini Player (Picture-in-Picture)" title="Floating Mini-Player (Picture-in-Picture)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="11" y="11" width="9" height="7" rx="1" fill="currentColor"/></svg>
       </button>
 
       <div class="vol">
@@ -183,6 +254,10 @@
     <button class="close-btn" type="button" onclick="toggleLyricsModal()" aria-label="Close lyrics">✕</button>
   </div>
 
+  <div class="lyrics-viz-bar">
+    <canvas id="lyricsVisualizer" width="350" height="40" title="Click to switch visualizer style"></canvas>
+  </div>
+
   <div id="lyrics-container" class="lyrics-container">
     <p class="lyrics-status">Play a song to load lyrics...</p>
   </div>
@@ -190,7 +265,7 @@
 
 <div id="eq-modal" class="eq-modal hidden">
   <div class="eq-header">
-    <h3>Audio Equalizer</h3>
+    <h3>Studio Audio & Equalizer</h3>
     <button class="close-btn" type="button" onclick="toggleEqModal()">✕</button>
   </div>
   
@@ -208,40 +283,167 @@
   <div class="eq-sliders">
     <div class="eq-band">
       <span class="eq-val" id="val-band-60">0dB</span>
-      <input type="range" id="band-60" min="-12" max="12" step="1" value="0" orient="vertical" oninput="updateBand(0, this.value)" />
+      <input type="range" id="band-60" min="-12" max="12" step="1" value="0" oninput="updateBand(0, this.value)" />
       <span class="eq-label">60Hz</span>
     </div>
     <div class="eq-band">
       <span class="eq-val" id="val-band-250">0dB</span>
-      <input type="range" id="band-250" min="-12" max="12" step="1" value="0" orient="vertical" oninput="updateBand(1, this.value)" />
+      <input type="range" id="band-250" min="-12" max="12" step="1" value="0" oninput="updateBand(1, this.value)" />
       <span class="eq-label">250Hz</span>
     </div>
     <div class="eq-band">
       <span class="eq-val" id="val-band-1k">0dB</span>
-      <input type="range" id="band-1k" min="-12" max="12" step="1" value="0" orient="vertical" oninput="updateBand(2, this.value)" />
+      <input type="range" id="band-1k" min="-12" max="12" step="1" value="0" oninput="updateBand(2, this.value)" />
       <span class="eq-label">1kHz</span>
     </div>
     <div class="eq-band">
       <span class="eq-val" id="val-band-4k">0dB</span>
-      <input type="range" id="band-4k" min="-12" max="12" step="1" value="0" orient="vertical" oninput="updateBand(3, this.value)" />
+      <input type="range" id="band-4k" min="-12" max="12" step="1" value="0" oninput="updateBand(3, this.value)" />
       <span class="eq-label">4kHz</span>
     </div>
     <div class="eq-band">
       <span class="eq-val" id="val-band-16k">0dB</span>
-      <input type="range" id="band-16k" min="-12" max="12" step="1" value="0" orient="vertical" oninput="updateBand(4, this.value)" />
+      <input type="range" id="band-16k" min="-12" max="12" step="1" value="0" oninput="updateBand(4, this.value)" />
       <span class="eq-label">16kHz</span>
+    </div>
+  </div>
+
+  <div class="studio-divider"></div>
+
+  <div class="studio-controls">
+    <div class="studio-row">
+      <div class="studio-label-wrap">
+        <span class="studio-title">Gapless Crossfade</span>
+        <span class="studio-sub">Smooth gain ramp between tracks</span>
+      </div>
+      <div class="studio-control-right">
+        <input type="range" id="crossfadeSlider" min="0" max="6" step="1" value="3" />
+        <span id="crossfadeVal" class="studio-badge">3s</span>
+      </div>
+    </div>
+
+    <div class="studio-row">
+      <div class="studio-label-wrap">
+        <span class="studio-title">ReplayGain Normalizer</span>
+        <span class="studio-sub">Dynamics compressor & RMS loudness match</span>
+      </div>
+      <label class="studio-switch">
+        <input type="checkbox" id="replayGainToggle" checked />
+        <span class="studio-slider"></span>
+      </label>
+    </div>
+
+    <div class="studio-row">
+      <div class="studio-label-wrap">
+        <span class="studio-title">Visualizer Mode</span>
+        <span class="studio-sub">Real-time AnalyserNode spectrum style</span>
+      </div>
+      <select id="vizModeSelect" class="studio-select">
+        <option value="bars">Frequency Bars</option>
+        <option value="retro">Retro LED Spectrum</option>
+        <option value="wave">Circular / Waveform</option>
+      </select>
     </div>
   </div>
 </div>
 
 <div id="playlistModal" class="modal-overlay" style="display:none;">
   <div class="modal-box">
-    <h3>New Playlist</h3>
-    <p>Give your playlist a title to start adding tracks.</p>
+    <h3 id="playlistModalTitle">New Playlist</h3>
+    <p id="playlistModalDesc">Give your playlist a title to start adding tracks.</p>
     <input type="text" id="modalPlaylistInput" placeholder="My Chill Vibes..." maxlength="50" autocomplete="off" />
     <div class="modal-actions">
       <button id="cancelModalBtn" class="btn-secondary" type="button">Cancel</button>
       <button id="createModalBtn" class="btn-primary" type="button">Create</button>
+    </div>
+  </div>
+</div>
+
+<div id="cmdPaletteModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box cmd-palette-box">
+    <div class="cmd-search-bar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input type="text" id="cmdPaletteInput" placeholder="Type a command or playlist…" autocomplete="off" spellcheck="false" />
+      <button type="button" class="close-btn" id="closeCmdPaletteBtn">✕</button>
+    </div>
+
+    <div id="cmdPaletteResults" class="cmd-results"></div>
+
+    <div class="cmd-shortcuts-section">
+      <div class="cmd-section-title">Keyboard Shortcuts</div>
+      <div class="cmd-shortcuts-grid">
+        <div class="hotkey-item">
+          <span class="hotkey-label">Play / Pause</span>
+          <span class="hotkey-keys"><kbd>Space</kbd></span>
+        </div>
+        <div class="hotkey-item">
+          <span class="hotkey-label">Seek -10s / +10s</span>
+          <span class="hotkey-keys"><kbd>J</kbd><span class="hotkey-sep">/</span><kbd>L</kbd></span>
+        </div>
+        <div class="hotkey-item">
+          <span class="hotkey-label">Seek -5s / +5s</span>
+          <span class="hotkey-keys"><kbd>←</kbd><span class="hotkey-sep">/</span><kbd>→</kbd></span>
+        </div>
+        <div class="hotkey-item">
+          <span class="hotkey-label">Volume ±5%</span>
+          <span class="hotkey-keys"><kbd>↑</kbd><span class="hotkey-sep">/</span><kbd>↓</kbd></span>
+        </div>
+        <div class="hotkey-item">
+          <span class="hotkey-label">Next / Previous</span>
+          <span class="hotkey-keys"><kbd>N</kbd><span class="hotkey-sep">/</span><kbd>P</kbd></span>
+        </div>
+        <div class="hotkey-item">
+          <span class="hotkey-label">Mute / Unmute</span>
+          <span class="hotkey-keys"><kbd>M</kbd></span>
+        </div>
+        <div class="hotkey-item">
+          <span class="hotkey-label">Favorite Track</span>
+          <span class="hotkey-keys"><kbd>F</kbd></span>
+        </div>
+        <div class="hotkey-item">
+          <span class="hotkey-label">Command Palette</span>
+          <span class="hotkey-keys"><kbd>Ctrl + K</kbd></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="listenAlongModal" class="modal-overlay" style="display:none;">
+  <div class="modal-box listen-along-box">
+    <div class="eq-header">
+      <h3>Listen Along — Live Room</h3>
+      <button type="button" class="close-btn" id="closeListenAlongBtn">✕</button>
+    </div>
+    <p>Synchronize playback and share a live queue with friends in real time.</p>
+
+    <div id="roomDisconnectedView">
+      <div class="room-join-row">
+        <input type="text" id="roomCodeInput" placeholder="Enter Room Code (e.g. PHN482)" maxlength="12" autocomplete="off" />
+        <button type="button" class="btn-primary" id="joinRoomBtn">Join</button>
+      </div>
+      <div class="room-or-divider"><span>OR</span></div>
+      <button type="button" class="btn-secondary full-width-btn" id="createRoomBtn">Create New Listen Along Room</button>
+    </div>
+
+    <div id="roomConnectedView" class="hidden">
+      <div class="room-active-banner">
+        <div>
+          <div class="room-code-label">Active Room Code</div>
+          <div class="room-code-display" id="activeRoomCodeDisplay">------</div>
+        </div>
+        <div class="room-banner-actions">
+          <button type="button" class="btn-secondary" id="copyRoomCodeBtn">Copy Code</button>
+          <button type="button" class="btn-secondary danger-border" id="leaveRoomBtn">Leave</button>
+        </div>
+      </div>
+      <div class="room-members-box">
+        <div class="nav-label">Connected Listeners (<span id="roomMemberCount">1</span>)</div>
+        <div id="roomMembersList" class="room-members-list"></div>
+      </div>
+      <div class="room-sync-actions">
+        <button type="button" class="btn-primary full-width-btn" id="broadcastStateBtn">Sync Everyone to My Current Playback</button>
+      </div>
     </div>
   </div>
 </div>
@@ -256,9 +458,42 @@
   <div id="dropdownPlaylistContainer"></div>
 </div>
 
-<audio id="audioEngine" crossorigin="anonymous" preload="none"></audio>
+<div id="videoModal" class="video-modal-backdrop hidden">
+  <div class="video-modal-card" id="videoModalCard">
+    <div class="video-modal-header">
+      <div class="video-meta-left">
+        <span class="yt-video-badge">● YT VIDEO</span>
+        <div class="video-titles">
+          <h3 id="videoModalTitle">Select a track</h3>
+          <p id="videoModalArtist">YouTube Music Video</p>
+        </div>
+      </div>
+      <div class="video-modal-actions">
+        <button type="button" class="video-ctrl-btn" id="videoDockBtn" title="Toggle Docked Mini-Video / Cinema Mode">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="12" y="11" width="8" height="7" rx="1" fill="currentColor"/></svg>
+        </button>
+        <button type="button" class="video-ctrl-btn" id="videoFullscreenBtn" title="Fullscreen Video">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
+        </button>
+        <button type="button" class="video-ctrl-btn close" id="closeVideoModalBtn" title="Minimize to Audio-Only">✕</button>
+      </div>
+    </div>
 
-<script src="auth-gate.js"></script>
-<script src="app.js"></script>
+    <div class="video-stage" id="videoStage">
+      <video id="musicVideoEl" class="music-video-el" crossorigin="anonymous" muted playsinline preload="none"></video>
+      <div id="videoLoadingOverlay" class="video-loading-overlay hidden">
+        <div class="video-spinner"></div>
+        <span>Loading YouTube Music Video…</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<audio id="audioEngine" crossorigin="anonymous" preload="auto"></audio>
+<audio id="audioEngineB" crossorigin="anonymous" preload="auto"></audio>
+
+<script src="socket.io.min.js"></script>
+<script src="auth-gate.js?v=10"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>

@@ -1,34 +1,36 @@
 (function () {
   "use strict";
 
-  // Block VS Code Live Server injected WebSocket from forcing full page reloads
+  // Block VS Code Live Server injected WebSocket from connecting or forcing full page reloads
   if (typeof window !== "undefined" && "WebSocket" in window) {
     const NativeWebSocket = window.WebSocket;
     const WrappedWebSocket = function (url, protocols) {
-      const ws = protocols !== undefined ? new NativeWebSocket(url, protocols) : new NativeWebSocket(url);
-      const isLiveServer = typeof url === "string" && (url.endsWith("/ws") || url.includes(":5500/"));
+      const isLiveServer =
+        typeof url === "string" &&
+        !url.includes(":5000") &&
+        (url.endsWith("/ws") || url.includes(":5500/"));
       if (isLiveServer) {
-        let userOnMessage = null;
-        Object.defineProperty(ws, "onmessage", {
-          configurable: true,
-          enumerable: true,
-          get: function () {
-            return userOnMessage;
-          },
-          set: function (fn) {
-            userOnMessage = function (event) {
-              if (event && event.data === "reload") {
-                return;
-              }
-              if (typeof fn === "function") {
-                return fn.call(this, event);
-              }
-            };
-            NativeWebSocket.prototype.addEventListener.call(ws, "message", userOnMessage);
-          }
-        });
+        return {
+          url: url,
+          readyState: 3,
+           protocol: "",
+          extensions: "",
+          bufferedAmount: 0,
+           binaryType: "blob",
+          onopen: null,
+          onerror: null,
+          onclose: null,
+          onmessage: null,
+          close: function () {},
+          send: function () {},
+          addEventListener: function () {},
+          removeEventListener: function () {},
+          dispatchEvent: function () { return true; }
+        };
       }
-      return ws;
+      return protocols !== undefined
+        ? new NativeWebSocket(url, protocols)
+        : new NativeWebSocket(url);
     };
     WrappedWebSocket.prototype = NativeWebSocket.prototype;
     WrappedWebSocket.CONNECTING = NativeWebSocket.CONNECTING;
