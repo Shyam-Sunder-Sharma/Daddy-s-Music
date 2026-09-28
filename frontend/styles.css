@@ -15,7 +15,10 @@
   --brand-glow: rgba(34, 197, 94, 0.25);
   --danger: #ef4444;
   --border: #242430;
+  --border-subtle: #24242e;
   --surface-2: #272733;
+  --bg-hover: #27272a;
+  --accent: #1ed760;
 }
 
 body {
@@ -27,7 +30,6 @@ body {
   user-select: none;
 }
 
-/* Custom Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -43,7 +45,6 @@ body {
   background: var(--text-muted);
 }
 
-/* Application Master Grid */
 .app {
   display: grid;
   grid-template-columns: 240px 1fr 300px;
@@ -52,7 +53,6 @@ body {
   overflow: hidden;
 }
 
-/* 1. Left Navigation */
 .nav {
   grid-row: 1;
   grid-column: 1;
@@ -143,6 +143,12 @@ body {
   color: var(--text-main);
 }
 
+.playlist-row.active {
+  background: var(--brand-glow);
+  color: var(--brand);
+  font-weight: 600;
+}
+
 .pl-delete {
   background: transparent;
   border: none;
@@ -177,7 +183,6 @@ body {
   background: var(--brand-glow);
 }
 
-/* 2. Main Center Content */
 .main {
   grid-row: 1;
   grid-column: 2;
@@ -245,7 +250,6 @@ body {
   margin-bottom: 20px;
 }
 
-/* Track List Table */
 .track-list {
   display: flex;
   flex-direction: column;
@@ -361,7 +365,6 @@ body {
   font-size: 0.9rem;
 }
 
-/* 3. Right Queue Drawer */
 .queue {
   grid-row: 1;
   grid-column: 3;
@@ -418,7 +421,6 @@ body {
   color: var(--danger);
 }
 
-/* 4. Bottom Player Controls */
 .player {
   grid-row: 2;
   grid-column: 1 / -1;
@@ -550,7 +552,6 @@ body {
   cursor: pointer;
 }
 
-/* Generic Buttons & Icons */
 .btn-primary {
   background: var(--brand);
   color: #000;
@@ -607,7 +608,6 @@ body {
   stroke: var(--danger);
 }
 
-/* Modals */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -663,7 +663,6 @@ body {
   margin-top: 18px;
 }
 
-/* Dropdown Menu */
 .track-dropdown {
   position: fixed;
   background: var(--bg-surface);
@@ -712,9 +711,6 @@ body {
   font-style: italic;
 }
 
-/* ============================================================
-   AUTH GATE — Full-Screen Sign-In & Sign-Up Overlay
-   ============================================================ */
 body.gate-active .app {
   display: none;
 }
@@ -966,7 +962,6 @@ body.gate-active .app {
   text-decoration: underline;
 }
 
-/* Action buttons for Favorites & Playlists */
 .view-actions {
   display: flex;
   align-items: center;
@@ -1008,21 +1003,17 @@ body.gate-active .app {
 }
 
 .icon-btn.remove-track:hover {
-  color: #ef4444; /* Red highlight on hover */
+  color: #ef4444;
 }
 
-/* =========================================================
-   Utility, Lyrics & Equalizer Styles
-========================================================= */
 .hidden {
   display: none !important;
 }
 
-/* Extra Player Buttons (Lyrics & EQ) */
 .icon-btn-extra {
   background: transparent;
   border: none;
-  color: var(--text-muted, #a1a1aa);
+  color: var(--text-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1033,7 +1024,7 @@ body.gate-active .app {
 }
 
 .icon-btn-extra:hover {
-  color: var(--text-main, #ffffff);
+  color: var(--text-main);
   transform: scale(1.08);
 }
 
@@ -1044,7 +1035,7 @@ body.gate-active .app {
 .close-btn {
   background: transparent;
   border: none;
-  color: var(--text-muted, #a1a1aa);
+  color: var(--text-muted);
   font-size: 1.2rem;
   cursor: pointer;
   padding: 4px 8px;
@@ -1055,7 +1046,6 @@ body.gate-active .app {
   color: #ffffff;
 }
 
-/* 1. Time-Synced Scrolling Lyrics */
 .lyrics-modal {
   position: fixed;
   top: 40px;
@@ -1065,7 +1055,7 @@ body.gate-active .app {
   max-width: calc(100vw - 48px);
   background: rgba(18, 18, 20, 0.95);
   backdrop-filter: blur(16px);
-  border: 1px solid var(--border, #27272a);
+  border: 1px solid var(--border);
   border-radius: 16px;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
   display: flex;
@@ -1080,13 +1070,12 @@ body.gate-active .app {
   justify-content: space-between;
   gap: 12px;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--border-subtle, #24242e);
-  background: var(--bg-card, #141418);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-card);
   width: 100%;
   box-sizing: border-box;
 }
 
-/* Allow text group to shrink and truncate cleanly without pushing controls */
 .lyrics-track-info {
   flex: 1 1 auto;
   min-width: 0;
@@ -1104,14 +1093,13 @@ body.gate-active .app {
 
 .lyrics-track-info p {
   font-size: 0.8rem;
-  color: var(--text-muted, #a1a1aa);
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   margin-top: 2px;
 }
 
-/* Offset Controls: locked size, uniform font, never squeezed */
 .lyrics-sync-controls {
   display: flex;
   align-items: center;
@@ -1146,11 +1134,10 @@ body.gate-active .app {
   text-align: center;
 }
 
-/* Close Button: fixed and always visible */
 .lyrics-header .close-btn {
   background: transparent;
   border: none;
-  color: var(--text-muted, #a1a1aa);
+  color: var(--text-muted);
   font-size: 1.25rem;
   cursor: pointer;
   display: flex;
@@ -1207,20 +1194,19 @@ body.gate-active .app {
 }
 
 .lyrics-status {
-  color: var(--text-muted, #71717a);
+  color: #71717a;
   font-size: 0.95rem;
   margin-top: 40px;
 }
 
-/* 2. Web Audio API Equalizer */
 .eq-modal {
   position: fixed;
   bottom: 100px;
   right: 60px;
   width: 360px;
   max-width: calc(100vw - 40px);
-  background: var(--bg-card, #18181b);
-  border: 1px solid var(--border, #27272a);
+  background: #18181b;
+  border: 1px solid #27272a;
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.75);
@@ -1247,7 +1233,7 @@ body.gate-active .app {
 }
 
 .eq-presets select {
-  background: var(--bg-hover, #27272a);
+  background: var(--bg-hover);
   border: 1px solid #3f3f46;
   color: #ffffff;
   padding: 6px 12px;
@@ -1274,14 +1260,14 @@ body.gate-active .app {
 
 .eq-val {
   font-size: 0.7rem;
-  color: var(--accent, #1ed760);
+  color: var(--accent);
   font-weight: 600;
   min-height: 14px;
 }
 
 .eq-label {
   font-size: 0.75rem;
-  color: var(--text-muted, #a1a1aa);
+  color: var(--text-muted);
 }
 
 .eq-band input[type="range"] {
@@ -1291,5 +1277,9 @@ body.gate-active .app {
   width: 8px;
   height: 105px;
   cursor: pointer;
-  accent-color: var(--accent, #1ed760);
+  accent-color: var(--accent);
+}
+
+html, body {
+  overscroll-behavior: none;
 }

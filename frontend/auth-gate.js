@@ -1,15 +1,51 @@
 (function () {
   "use strict";
 
+  // Block VS Code Live Server injected WebSocket from forcing full page reloads
+  if (typeof window !== "undefined" && "WebSocket" in window) {
+    const NativeWebSocket = window.WebSocket;
+    const WrappedWebSocket = function (url, protocols) {
+      const ws = protocols !== undefined ? new NativeWebSocket(url, protocols) : new NativeWebSocket(url);
+      const isLiveServer = typeof url === "string" && (url.endsWith("/ws") || url.includes(":5500/"));
+      if (isLiveServer) {
+        let userOnMessage = null;
+        Object.defineProperty(ws, "onmessage", {
+          configurable: true,
+          enumerable: true,
+          get: function () {
+            return userOnMessage;
+          },
+          set: function (fn) {
+            userOnMessage = function (event) {
+              if (event && event.data === "reload") {
+                return;
+              }
+              if (typeof fn === "function") {
+                return fn.call(this, event);
+              }
+            };
+            NativeWebSocket.prototype.addEventListener.call(ws, "message", userOnMessage);
+          }
+        });
+      }
+      return ws;
+    };
+    WrappedWebSocket.prototype = NativeWebSocket.prototype;
+    WrappedWebSocket.CONNECTING = NativeWebSocket.CONNECTING;
+    WrappedWebSocket.OPEN = NativeWebSocket.OPEN;
+    WrappedWebSocket.CLOSING = NativeWebSocket.CLOSING;
+    WrappedWebSocket.CLOSED = NativeWebSocket.CLOSED;
+    window.WebSocket = WrappedWebSocket;
+  }
+
   const API_BASE = "http://127.0.0.1:5000/api";
   const TOKEN_KEY = "phantom_token";
   const USER_KEY = "phantom_user";
 
-  var mode = "login"; // "login" | "register"
+  var mode = "login";
   var usernameCheckTimer = null;
   var usernameAvailable = null;
 
-  // Wait until DOM is completely parsed
   document.addEventListener("DOMContentLoaded", initAuthGate);
 
   function initAuthGate() {
@@ -35,7 +71,6 @@
       return;
     }
 
-    // ---------------- Storage Helpers ----------------
     function getToken() {
       try { return localStorage.getItem(TOKEN_KEY); } catch (e) { return null; }
     }
@@ -52,12 +87,24 @@
       } catch (e) {}
     }
 
-    window.authFetch = function (url, opts) {
+    // SAFE AUTH FETCH: Will NEVER reload the page on 401 or network drop
+    window.authFetch = async function (url, opts) {
       opts = opts || {};
       opts.headers = Object.assign({}, opts.headers || {});
       var token = getToken();
       if (token) opts.headers["Authorization"] = "Bearer " + token;
-      return fetch(url, opts);
+
+      try {
+        var res = await fetch(url, opts);
+        if (res.status === 401) {
+          console.warn("Session expired or unauthorized for:", url);
+          // Do NOT call window.location.reload() here!
+        }
+        return res;
+      } catch (err) {
+        console.warn("Network request error in authFetch:", err);
+        return { ok: false, status: 0, json: async () => ({}) };
+      }
     };
 
     function showGate() {
@@ -79,18 +126,23 @@
       var chip = document.createElement("div");
       chip.className = "user-chip";
       chip.innerHTML = '<span>Signed in as <strong>' + escapeHtml(user.username) + "</strong></span>";
+      
       var logoutBtn = document.createElement("button");
       logoutBtn.className = "btn-link-danger";
       logoutBtn.type = "button";
       logoutBtn.textContent = "Logout";
-      logoutBtn.addEventListener("click", logout);
+      logoutBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        logout();
+      });
       chip.appendChild(logoutBtn);
       container.appendChild(chip);
     }
 
     function escapeHtml(str) {
       if (!str) return "";
-      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
     async function logout() {
@@ -98,11 +150,12 @@
         await window.authFetch(API_BASE + "/auth/logout", { method: "POST" });
       } catch (e) {}
       clearSession();
-      window.location.reload();
+      // Smoothly switch back to login gate instead of forcing a page reload
+      showGate();
+      setMode("login");
     }
     window.phantomLogout = logout;
 
-    // ---------------- Mode Switch Logic ----------------
     function setMode(next) {
       mode = next;
       if (mode === "login") {
@@ -127,32 +180,36 @@
       authError.style.display = "none";
     }
 
-    // Direct tab click attachments
     tabLogin.onclick = function (e) {
       e.preventDefault();
+      e.stopPropagation();
       setMode("login");
     };
 
     tabRegister.onclick = function (e) {
       e.preventDefault();
+      e.stopPropagation();
       setMode("register");
     };
 
     if (switchLink) {
       switchLink.onclick = function (e) {
         e.preventDefault();
+        e.stopPropagation();
         setMode(mode === "login" ? "register" : "login");
       };
     }
 
     if (passToggle) {
-      passToggle.onclick = function () {
+      passToggle.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
         passwordInput.type = passwordInput.type === "password" ? "text" : "password";
       };
     }
 
-    // ---------------- Live Username Availability Check ----------------
-    usernameInput.addEventListener("input", function () {
+    usernameInput.addEventListener("input", function (e) {
+      e.stopPropagation();
       usernameAvailable = null;
       usernameMsg.className = "field-msg";
       if (mode !== "register") return;
@@ -191,7 +248,6 @@
       }, 350);
     });
 
-    // ---------------- Password Strength ----------------
     function scorePassword(pw) {
       var score = 0;
       if (pw.length >= 8) score++;
@@ -205,7 +261,8 @@
     var STRENGTH_LABELS = ["Weak", "Weak", "Fair", "Good", "Strong"];
     var STRENGTH_COLORS = ["#ef4444", "#ef4444", "#f59e0b", "#84cc16", "#22c55e"];
 
-    passwordInput.addEventListener("input", function () {
+    passwordInput.addEventListener("input", function (e) {
+      e.stopPropagation();
       passwordMsg.textContent = "";
       if (mode !== "register") return;
       var pw = passwordInput.value;
@@ -220,9 +277,9 @@
       strengthLabel.textContent = STRENGTH_LABELS[score];
     });
 
-    // ---------------- Submit ----------------
     form.addEventListener("submit", async function (e) {
       e.preventDefault();
+      e.stopPropagation();
       authError.style.display = "none";
 
       var username = usernameInput.value.trim();
@@ -282,7 +339,6 @@
       }
     });
 
-    // ---------------- Boot Session Check ----------------
     async function boot() {
       var token = getToken();
       if (!token) {
@@ -291,12 +347,27 @@
       }
       try {
         var res = await window.authFetch(API_BASE + "/auth/me");
-        if (res.ok) {
+        if (res && res.ok) {
           var data = await res.json();
           hideGate(data.user);
           return;
         }
+        if (res && res.status === 401) {
+          clearSession();
+          showGate();
+          return;
+        }
       } catch (e) {}
+
+      // If backend is temporarily unreachable but cached user exists, keep session alive
+      try {
+        var cachedUser = JSON.parse(localStorage.getItem(USER_KEY) || "null");
+        if (cachedUser && cachedUser.username) {
+          hideGate(cachedUser);
+          return;
+        }
+      } catch (e) {}
+
       clearSession();
       showGate();
     }

@@ -1,9 +1,9 @@
 """
 auth.py — Standalone authentication module for Daddy's Music
---------------------------------------------------------------
-Handles: unique-username signup, hashed passwords, token-based sessions.
 """
 
+import os
+import sys
 import re
 import sqlite3
 import secrets
@@ -12,22 +12,26 @@ from functools import wraps
 from flask import Blueprint, request, jsonify, g
 from werkzeug.security import generate_password_hash, check_password_hash
 
-DB_NAME = "music.db"
-TOKEN_LIFETIME_DAYS = 30
+sys.dont_write_bytecode = True
 
-# 3-20 chars, letters/numbers/underscore only
+DATA_DIR = os.path.join(os.path.expanduser("~"), ".daddys_music_data")
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, "music.db")
+
+TOKEN_LIFETIME_DAYS = 30
 USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{3,20}$')
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
-
 def get_db():
-    conn = sqlite3.connect(DB_NAME)
+    conn = sqlite3.connect(DB_PATH, timeout=10.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
-
-def init_auth_db():
+def init_auth_db(custom_path=None):
+    global DB_PATH
+    if custom_path:
+        DB_PATH = custom_path
     conn = get_db()
     c = conn.cursor()
     c.execute('''
@@ -51,14 +55,10 @@ def init_auth_db():
     conn.commit()
     conn.close()
 
-
-# ---------------- Validation ----------------
-
 def validate_username(username):
     if not username or not USERNAME_RE.match(username):
         return "Username must be 3-20 characters: letters, numbers, or underscores only."
     return None
-
 
 def validate_password(password):
     if not password or len(password) < 8:
@@ -73,9 +73,6 @@ def validate_password(password):
         return "Password needs at least one special character."
     return None
 
-
-# ---------------- Sessions ----------------
-
 def make_token(user_id):
     token = secrets.token_hex(32)
     now = datetime.utcnow()
@@ -88,7 +85,6 @@ def make_token(user_id):
     conn.commit()
     conn.close()
     return token
-
 
 def get_user_from_token(token):
     if not token:
@@ -105,16 +101,13 @@ def get_user_from_token(token):
         return None
     return {'id': row['id'], 'username': row['username']}
 
-
 def _extract_token():
-    auth_header = request.headers.get('Authorization', '')
+    auth_header = request.headers.get('Authorization', '') or request.headers.get('authorization', '')
     if auth_header.startswith('Bearer '):
         return auth_header[7:].strip()
     return None
 
-
 def require_auth(f):
-    """Decorator: protects a route, exposes g.current_user = {'id', 'username'}."""
     @wraps(f)
     def wrapper(*args, **kwargs):
         user = get_user_from_token(_extract_token())
@@ -123,9 +116,6 @@ def require_auth(f):
         g.current_user = user
         return f(*args, **kwargs)
     return wrapper
-
-
-# ---------------- Routes ----------------
 
 @auth_bp.route('/check-username', methods=['GET'])
 def check_username():
@@ -139,7 +129,6 @@ def check_username():
     ).fetchone()
     conn.close()
     return jsonify({'available': row is None})
-
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
@@ -173,7 +162,6 @@ def register():
     token = make_token(user_id)
     return jsonify({'user': {'id': user_id, 'username': username}, 'token': token})
 
-
 @auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.json or {}
@@ -195,7 +183,6 @@ def login():
     token = make_token(row['id'])
     return jsonify({'user': {'id': row['id'], 'username': row['username']}, 'token': token})
 
-
 @auth_bp.route('/logout', methods=['POST'])
 @require_auth
 def logout():
@@ -204,7 +191,6 @@ def logout():
     conn.commit()
     conn.close()
     return jsonify({'status': 'logged out'})
-
 
 @auth_bp.route('/me', methods=['GET'])
 @require_auth

@@ -21,7 +21,7 @@
       <button type="button" class="auth-tab" id="tabRegister" data-mode="register">Sign Up</button>
     </div>
 
-    <form id="authForm" autocomplete="off">
+    <form id="authForm" autocomplete="off" action="javascript:void(0);">
       <div class="auth-field">
         <label for="gateUsername">Username</label>
         <input type="text" id="gateUsername" placeholder="e.g. phantom_92" autocomplete="off" maxlength="20" />
@@ -82,9 +82,10 @@
 
   <main class="main">
     <div class="top-row">
-      <div class="search-wrap">
+      <!-- Standard div to prevent form submission side-effects -->
+      <div class="search-wrap" role="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-        <input id="searchInput" type="text" placeholder="Search songs, artists, albums…" aria-label="Search library" autocomplete="off">
+        <input id="searchInput" type="text" placeholder="Search songs, artists, albums…" aria-label="Search library" autocomplete="off" spellcheck="false">
       </div>
 
       <div class="auth-bar" id="authNavbarContainer"></div>
@@ -112,33 +113,32 @@
   </aside>
 
   <footer class="player" aria-label="Player controls">
-    
     <div class="p-now" id="playerNow">
       <img class="cover" id="nowCover" src="" alt="Album Art" style="display:none; object-fit:cover;" />
       <div class="t-meta">
         <div class="t-title" id="nowTitle">Nothing playing</div>
         <div class="t-artist" id="nowArtist">Pick a track to start</div>
       </div>
-      <button class="icon-btn fav" id="nowFav" aria-label="Favorite current track">
+      <button type="button" class="icon-btn fav" id="nowFav" aria-label="Favorite current track">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20s-7-4.4-9.5-9A5.5 5.5 0 0112 5.5 5.5 5.5 0 0121.5 11c-2.5 4.6-9.5 9-9.5 9z"/></svg>
       </button>
     </div>
 
     <div class="p-controls">
       <div class="p-buttons">
-        <button class="toggle" id="shuffleBtn" aria-label="Shuffle" title="Shuffle">
+        <button type="button" class="toggle" id="shuffleBtn" aria-label="Shuffle" title="Shuffle">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M4 4l5 5"/></svg>
         </button>
-        <button id="prevBtn" aria-label="Previous track">
+        <button type="button" id="prevBtn" aria-label="Previous track">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14l-11-7z"/></svg>
         </button>
-        <button class="play-btn" id="playBtn" aria-label="Play">
+        <button type="button" class="play-btn" id="playBtn" aria-label="Play">
           <svg id="playIcon" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
         </button>
-        <button id="nextBtn" aria-label="Next track">
+        <button type="button" id="nextBtn" aria-label="Next track">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg>
         </button>
-        <button class="toggle" id="repeatBtn" aria-label="Repeat" title="Repeat">
+        <button type="button" class="toggle" id="repeatBtn" aria-label="Repeat" title="Repeat">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 2l4 4-4 4M3 11V9a4 4 0 014-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 01-4 4H3"/></svg>
         </button>
       </div>
@@ -152,11 +152,10 @@
     </div>
 
     <div class="p-extra">
-      <!-- Lyrics & Equalizer Buttons -->
-      <button class="icon-btn-extra" id="lyricsBtn" aria-label="Toggle Lyrics" title="Lyrics" onclick="toggleLyricsModal()">
+      <button type="button" class="icon-btn-extra" id="lyricsBtn" aria-label="Toggle Lyrics" title="Lyrics" onclick="toggleLyricsModal()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
       </button>
-      <button class="icon-btn-extra" id="eqBtn" aria-label="Audio Equalizer" title="Equalizer" onclick="toggleEqModal()">
+      <button type="button" class="icon-btn-extra" id="eqBtn" aria-label="Audio Equalizer" title="Equalizer" onclick="toggleEqModal()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 20h4V4h-4v16zm-6 0h4v-8H4v8zM16 9v11h4V9h-4z"/></svg>
       </button>
 
@@ -166,10 +165,8 @@
       </div>
     </div>
   </footer>
-
 </div>
 
-<!-- Time-Synced Lyrics Modal -->
 <div id="lyrics-modal" class="lyrics-modal hidden">
   <div class="lyrics-header">
     <div class="lyrics-track-info">
@@ -177,14 +174,12 @@
       <p id="lyrics-song-artist">Artist Name</p>
     </div>
 
-    <!-- Sync Calibration Controls -->
     <div class="lyrics-sync-controls">
       <button type="button" class="sync-adj-btn" onclick="adjustLyricOffset(-0.5)" title="Lyrics earlier (-0.5s)">-0.5s</button>
       <span id="lyricOffsetDisplay">-0.3s</span>
       <button type="button" class="sync-adj-btn" onclick="adjustLyricOffset(0.5)" title="Lyrics later (+0.5s)">+0.5s</button>
     </div>
 
-    <!-- Always Visible Close Button -->
     <button class="close-btn" type="button" onclick="toggleLyricsModal()" aria-label="Close lyrics">✕</button>
   </div>
 
@@ -193,7 +188,6 @@
   </div>
 </div>
 
-<!-- 5-Band Audio Equalizer Modal -->
 <div id="eq-modal" class="eq-modal hidden">
   <div class="eq-header">
     <h3>Audio Equalizer</h3>
@@ -262,7 +256,7 @@
   <div id="dropdownPlaylistContainer"></div>
 </div>
 
-<audio id="audioEngine" preload="none"></audio>
+<audio id="audioEngine" crossorigin="anonymous" preload="none"></audio>
 
 <script src="auth-gate.js"></script>
 <script src="app.js"></script>
