@@ -939,6 +939,8 @@ class ProgressiveStreamBuffer:
         self.completed = False
         self.failed = False
         self.aborted = False
+        self.active_readers = 0
+        self.last_reader_time = time.time()
         self.cond = threading.Condition()
         self._thread = threading.Thread(target=self._download_worker, daemon=True)
         self._thread.start()
@@ -1104,16 +1106,22 @@ class ProgressiveStreamBuffer:
 
 def get_or_create_stream_buffer(track_id, url, mime_type, upstream_headers=None, kind="audio", query_target=None):
     key = (str(track_id), kind)
+    now = time.time()
     with _BUFFER_LOCK:
-        # Abort any unfinished buffers for OTHER tracks so 100% of bandwidth serves the current song
+        # Multi-user safe cleanup: only abort unfinished buffers that have NO active listeners
         for (other_id, other_kind), buf_obj in list(ACTIVE_STREAM_BUFFERS.items()):
-            if other_id != str(track_id) and not buf_obj.completed:
-                buf_obj.abort()
-                ACTIVE_STREAM_BUFFERS.pop((other_id, other_kind), None)
+            if other_id != str(track_id):
+                if not buf_obj.completed and buf_obj.active_readers <= 0 and (now - buf_obj.last_reader_time) > 2.5:
+                    buf_obj.abort()
+                    ACTIVE_STREAM_BUFFERS.pop((other_id, other_kind), None)
+                elif buf_obj.completed and buf_obj.active_readers <= 0 and len(ACTIVE_STREAM_BUFFERS) > 40:
+                    # Completed buffers are already persisted to AUDIO_CACHE_DIR; free RAM when cache grows
+                    ACTIVE_STREAM_BUFFERS.pop((other_id, other_kind), None)
 
         existing = ACTIVE_STREAM_BUFFERS.get(key)
         if existing and not existing.aborted and not existing.failed:
             if not existing.completed or (existing.total_size > 0 and len(existing.buf) >= existing.total_size):
+                existing.last_reader_time = now
                 return existing
             ACTIVE_STREAM_BUFFERS.pop(key, None)
 
@@ -1299,64 +1307,73 @@ def serve_progressive_stream(track_id, query_target, kind="audio", transcode=Fal
     def generate_from_ram():
         pos = start
         limit = (end + 1) if (end is not None and total_size > 0) else None
-        while True:
-            with buf_obj.cond:
-                while pos >= len(buf_obj.buf) and not buf_obj.completed and not buf_obj.failed and not buf_obj.aborted:
-                    buf_obj.cond.wait(timeout=1.0)
-                avail = len(buf_obj.buf)
-                done = buf_obj.completed or buf_obj.failed or buf_obj.aborted
+        with buf_obj.cond:
+            buf_obj.active_readers += 1
+            buf_obj.last_reader_time = time.time()
+        try:
+            while True:
+                with buf_obj.cond:
+                    while pos >= len(buf_obj.buf) and not buf_obj.completed and not buf_obj.failed and not buf_obj.aborted:
+                        buf_obj.cond.wait(timeout=1.0)
+                    avail = len(buf_obj.buf)
+                    done = buf_obj.completed or buf_obj.failed or buf_obj.aborted
+                    buf_obj.last_reader_time = time.time()
 
-            if pos < avail:
-                read_end = min(avail, pos + 32768)
-                if limit is not None:
-                    read_end = min(read_end, limit)
-                chunk = bytes(buf_obj.buf[pos:read_end])
-                pos = read_end
-                yield chunk
-                if limit is not None and pos >= limit:
-                    break
-            elif done:
-                # Seamless fallback if buffer failed before reaching limit (so browser never gets IncompleteRead)
-                if not buf_obj.aborted and (limit is None or pos < limit):
-                    fb_sess = _build_private_session()
-                    fb_tries = 0
-                    try:
-                        while (limit is None or pos < limit) and fb_tries < 8 and not buf_obj.aborted:
-                            span_end = (min(pos + 262143, limit - 1)) if limit is not None else (pos + 262143)
-                            fb_hdrs = dict(buf_obj.upstream_headers or {})
-                            if 'clen=' in buf_obj.url and 'range=' not in buf_obj.url:
-                                fb_url = f"{buf_obj.url}&range={pos}-{span_end}"
-                                fb_hdrs.pop('Range', None)
-                            else:
-                                fb_url = buf_obj.url
-                                fb_hdrs['Range'] = f"bytes={pos}-{span_end}"
-                            try:
-                                with fb_sess.get(fb_url, headers=fb_hdrs, stream=True, timeout=(6, 12)) as fb_r:
-                                    if fb_r.status_code not in (200, 206):
-                                        fb_tries += 1
-                                        time.sleep(0.2)
-                                        continue
-                                    got = 0
-                                    for fb_chunk in fb_r.iter_content(chunk_size=16384):
-                                        if buf_obj.aborted or not fb_chunk:
-                                            continue
-                                        got += len(fb_chunk)
-                                        pos += len(fb_chunk)
-                                        fb_tries = 0
-                                        yield fb_chunk
-                                        if limit is not None and pos >= limit:
-                                            break
-                                    if got == 0:
-                                        fb_tries += 1
-                            except Exception:
-                                fb_tries += 1
-                                time.sleep(0.2)
-                    finally:
+                if pos < avail:
+                    read_end = min(avail, pos + 32768)
+                    if limit is not None:
+                        read_end = min(read_end, limit)
+                    chunk = bytes(buf_obj.buf[pos:read_end])
+                    pos = read_end
+                    yield chunk
+                    if limit is not None and pos >= limit:
+                        break
+                elif done:
+                    # Seamless fallback if buffer failed before reaching limit (so browser never gets IncompleteRead)
+                    if not buf_obj.aborted and (limit is None or pos < limit):
+                        fb_sess = _build_private_session()
+                        fb_tries = 0
                         try:
-                            fb_sess.close()
-                        except Exception:
-                            pass
-                break
+                            while (limit is None or pos < limit) and fb_tries < 8 and not buf_obj.aborted:
+                                span_end = (min(pos + 262143, limit - 1)) if limit is not None else (pos + 262143)
+                                fb_hdrs = dict(buf_obj.upstream_headers or {})
+                                if 'clen=' in buf_obj.url and 'range=' not in buf_obj.url:
+                                    fb_url = f"{buf_obj.url}&range={pos}-{span_end}"
+                                    fb_hdrs.pop('Range', None)
+                                else:
+                                    fb_url = buf_obj.url
+                                    fb_hdrs['Range'] = f"bytes={pos}-{span_end}"
+                                try:
+                                    with fb_sess.get(fb_url, headers=fb_hdrs, stream=True, timeout=(6, 12)) as fb_r:
+                                        if fb_r.status_code not in (200, 206):
+                                            fb_tries += 1
+                                            time.sleep(0.2)
+                                            continue
+                                        got = 0
+                                        for fb_chunk in fb_r.iter_content(chunk_size=16384):
+                                            if buf_obj.aborted or not fb_chunk:
+                                                continue
+                                            got += len(fb_chunk)
+                                            pos += len(fb_chunk)
+                                            fb_tries = 0
+                                            yield fb_chunk
+                                            if limit is not None and pos >= limit:
+                                                break
+                                        if got == 0:
+                                            fb_tries += 1
+                                except Exception:
+                                    fb_tries += 1
+                                    time.sleep(0.2)
+                        finally:
+                            try:
+                                fb_sess.close()
+                            except Exception:
+                                pass
+                    break
+        finally:
+            with buf_obj.cond:
+                buf_obj.active_readers = max(0, buf_obj.active_readers - 1)
+                buf_obj.last_reader_time = time.time()
 
     return Response(generate_from_ram(), status=status_code, headers=resp_headers)
 
