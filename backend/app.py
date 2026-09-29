@@ -1108,14 +1108,14 @@ def get_or_create_stream_buffer(track_id, url, mime_type, upstream_headers=None,
     key = (str(track_id), kind)
     now = time.time()
     with _BUFFER_LOCK:
-        # Multi-user safe cleanup: only abort unfinished buffers that have NO active listeners
+        # Multi-user safe cleanup: only abort unfinished buffers that have NO active listeners,
+        # and free RAM immediately for completed buffers (since they are saved on disk in AUDIO_CACHE_DIR)
         for (other_id, other_kind), buf_obj in list(ACTIVE_STREAM_BUFFERS.items()):
             if other_id != str(track_id):
                 if not buf_obj.completed and buf_obj.active_readers <= 0 and (now - buf_obj.last_reader_time) > 2.5:
                     buf_obj.abort()
                     ACTIVE_STREAM_BUFFERS.pop((other_id, other_kind), None)
-                elif buf_obj.completed and buf_obj.active_readers <= 0 and len(ACTIVE_STREAM_BUFFERS) > 40:
-                    # Completed buffers are already persisted to AUDIO_CACHE_DIR; free RAM when cache grows
+                elif buf_obj.completed and buf_obj.active_readers <= 0:
                     ACTIVE_STREAM_BUFFERS.pop((other_id, other_kind), None)
 
         existing = ACTIVE_STREAM_BUFFERS.get(key)
