@@ -14,8 +14,14 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 sys.dont_write_bytecode = True
 
-DATA_DIR = os.path.join(os.path.expanduser("~"), ".daddys_music_data")
-os.makedirs(DATA_DIR, exist_ok=True)
+import tempfile
+
+DATA_DIR = os.environ.get("DADDY_MUSIC_DATA_DIR") or os.path.join(os.path.expanduser("~"), ".daddys_music_data")
+try:
+    os.makedirs(DATA_DIR, exist_ok=True)
+except Exception:
+    DATA_DIR = os.path.join(tempfile.gettempdir(), ".daddys_music_data")
+    os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "music.db")
 
 TOKEN_LIFETIME_DAYS = 30

@@ -1,0 +1,8 @@
+Flask>=3.0.0
+flask-cors>=4.0.0
+flask-socketio>=5.3.6
+simple-websocket>=1.0.0
+requests>=2.31.0
+yt-dlp>=2025.1.1
+gunicorn>=21.2.0
+imageio-ffmpeg>=0.5.1

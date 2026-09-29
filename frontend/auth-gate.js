@@ -40,7 +40,12 @@
     window.WebSocket = WrappedWebSocket;
   }
 
-  const API_BASE = "http://127.0.0.1:5000/api";
+  const IS_LOCAL_SPLIT_PORT =
+    window.location.protocol === "file:" ||
+    ((window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") &&
+      window.location.port !== "" &&
+      window.location.port !== "5000");
+  const API_BASE = (IS_LOCAL_SPLIT_PORT ? "http://127.0.0.1:5000" : window.location.origin) + "/api";
   const TOKEN_KEY = "phantom_token";
   const USER_KEY = "phantom_user";
 

@@ -50,13 +50,18 @@ HTTP_SESSION.headers.update({
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 })
 
+import tempfile
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 from auth import auth_bp, init_auth_db, require_auth
 
 app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend"))
 if not os.path.isdir(FRONTEND_DIR):
     FRONTEND_DIR = BASE_DIR
@@ -91,9 +96,13 @@ app.register_blueprint(auth_bp)
 
 # Store the database and LRU audio cache in a separate hidden directory outside the workspace
 # so file watchers (VS Code Live Server / OneDrive) NEVER trigger a browser reload
-DATA_DIR = os.path.join(os.path.expanduser("~"), ".daddys_music_data")
+DATA_DIR = os.environ.get("DADDY_MUSIC_DATA_DIR") or os.path.join(os.path.expanduser("~"), ".daddys_music_data")
+try:
+    os.makedirs(DATA_DIR, exist_ok=True)
+except Exception:
+    DATA_DIR = os.path.join(tempfile.gettempdir(), ".daddys_music_data")
+    os.makedirs(DATA_DIR, exist_ok=True)
 AUDIO_CACHE_DIR = os.path.join(DATA_DIR, "audio_cache")
-os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "music.db")
 
@@ -1457,15 +1466,24 @@ def handle_disconnect():
             else:
                 emit('room_members', {'members': member_list}, to=room)
 
-if __name__ == '__main__':
-    def _run_companion_5500():
-        try:
-            from werkzeug.serving import make_server
-            srv = make_server('127.0.0.1', 5500, app, threaded=True)
-            srv.serve_forever()
-        except Exception:
-            pass
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({'status': 'ok', 'service': 'daddys-music'})
 
-    threading.Thread(target=_run_companion_5500, daemon=True).start()
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    host = os.environ.get('HOST', '0.0.0.0')
+
+    if port == 5000 and not os.environ.get('RENDER') and not os.environ.get('RAILWAY_ENVIRONMENT'):
+        def _run_companion_5500():
+            try:
+                from werkzeug.serving import make_server
+                srv = make_server('127.0.0.1', 5500, app, threaded=True)
+                srv.serve_forever()
+            except Exception:
+                pass
+
+        threading.Thread(target=_run_companion_5500, daemon=True).start()
+
     # Run via SocketIO with reloader disabled so it never reboots or spawns duplicate listeners
-    socketio.run(app, host='127.0.0.1', port=5000, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
+    socketio.run(app, host=host, port=port, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
