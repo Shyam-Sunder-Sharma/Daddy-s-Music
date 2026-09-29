@@ -2750,7 +2750,7 @@
         if (!q || q.length < 2) continue;
 
         try {
-          var res = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(q)}`);
+          var res = await fetch(`${API_BASE}/lyrics?q=${encodeURIComponent(q)}`);
           if (res.ok) {
             var items = await res.json();
             if (Array.isArray(items)) {
@@ -3501,7 +3501,7 @@
       if ("caches" in window) {
         caches.keys().then(function (keys) {
           keys.forEach(function (k) {
-            if (k !== "daddy-music-shell-v11") {
+            if (k !== "daddy-music-shell-v12") {
               caches.delete(k).catch(function () {});
             }
           });
