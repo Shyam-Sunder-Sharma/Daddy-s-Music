@@ -871,102 +871,125 @@ def _pick_best_formats(info):
 
     return audio_url, audio_mime, audio_headers, video_url, video_mime, video_headers
 
-def _clean_artist_title(raw_query):
-    q = (raw_query or "").strip()
-    if " - " in q:
-        artist_part, title_part = q.split(" - ", 1)
-        primary_artist = re.split(r'[,&]', artist_part)[0].strip()
-        title_clean = re.sub(r'\(.*?\)|\[.*?\]', '', title_part).strip()
-        if not title_clean:
-            title_clean = title_part.strip()
-        return f"{primary_artist} {title_clean}".strip(), primary_artist.lower(), title_clean.lower()
-    q_clean = re.sub(r'\(.*?\)|\[.*?\]', '', q).strip() or q
-    return q_clean, "", q_clean.lower()
+_LABEL_NOISE_RE = re.compile(
+    r'\b(universal\s+music(\s+india)?|t-series|zee\s+music(\s+company)?|sony\s+music(\s+india)?|'
+    r'yrf|tips\s+official|saregama(\s+music)?|speed\s+records|white\s+hill\s+music|desi\s+melodies|'
+    r'unplgd\s+records(\s+and)?|unplg\'?d|vevo|topic|records|official\s+music\s+video|official\s+video|'
+    r'official\s+audio|full\s+video|full\s+song|lyrical\s+video|trending\s+song|8k|4k|hd|video|audio|song)\b',
+    re.IGNORECASE
+)
 
-def _is_valid_saavn_candidate(cand_title, cand_artists, dur, want_artist, want_title, raw_query_lower):
-    if dur < 60:
-        return False
-    ct = cand_title.lower()
-    ca = cand_artists.lower()
-    # Reject unwanted remakes/karaoke/nightcore unless explicitly searched
-    for bad_kw in ("karaoke", "nightcore", "instrumental", "8d audio", "ringtone", "backing track"):
-        if bad_kw in ct and bad_kw not in raw_query_lower:
-            return False
-    # Check title overlap
-    title_words = [w for w in re.split(r'\W+', want_title) if len(w) >= 3]
-    if title_words and not any(w in ct for w in title_words):
-        return False
-    # If we know the primary artist, require at least one artist word match in artist or title
-    if want_artist:
-        art_words = [w for w in re.split(r'\W+', want_artist) if len(w) >= 3]
-        if art_words and not any((w in ca or w in ct) for w in art_words):
-            return False
-    return True
+def _build_clean_queries(raw_query):
+    """Strip YouTube channel names, pipes, @handles, and SEO tags into clean search queries."""
+    q = (raw_query or "").strip()
+    q_no_pipe = q.split("|")[0].strip()
+    q_no_brackets = re.sub(r'\(.*?\)|\[.*?\]|\{.*?\}', ' ', q_no_pipe)
+    q_no_handles = re.sub(r'@\S+', ' ', q_no_brackets)
+
+    candidates = []
+    if " - " in q_no_handles:
+        raw_parts = q_no_handles.split(" - ")
+        cleaned_parts = []
+        for idx, p in enumerate(raw_parts):
+            if idx == 0:
+                p = re.split(r'[,&]', p)[0]
+            cp = _LABEL_NOISE_RE.sub(" ", p)
+            cp = re.sub(r'[-–—:/\\,]+', ' ', cp)
+            cp = re.sub(r'\s+', ' ', cp).strip()
+            if cp:
+                cleaned_parts.append(cp)
+        if len(cleaned_parts) >= 2:
+            candidates.append(f"{cleaned_parts[1]} {cleaned_parts[0]}".strip())
+            candidates.append(f"{cleaned_parts[0]} {cleaned_parts[1]}".strip())
+            candidates.append(cleaned_parts[1])
+        elif len(cleaned_parts) == 1:
+            candidates.append(cleaned_parts[0])
+
+    q_clean = _LABEL_NOISE_RE.sub(" ", q_no_handles)
+    q_clean = re.sub(r'[-–—:/\\,&]+', ' ', q_clean)
+    q_clean = re.sub(r'\s+', ' ', q_clean).strip()
+    if q_clean and q_clean not in candidates:
+        candidates.append(q_clean)
+
+    dedup = []
+    for c in candidates:
+        if len(c) >= 2 and c not in dedup:
+            dedup.append(c)
+    return dedup[:3] or [q[:60]]
+
+def _score_saavn_item(c_name, c_artists, c_dur, query_str, raw_lower):
+    if c_dur < 35:
+        return -999
+    ct = c_name.lower()
+    ca = c_artists.lower()
+    for bad_kw in ("karaoke", "nightcore", "instrumental", "8d audio", "ringtone", "backing track", "originally performed"):
+        if bad_kw in ct and bad_kw not in raw_lower and bad_kw not in ca:
+            return -999
+        if "karaoke" in ca and "karaoke" not in raw_lower:
+            return -999
+    q_words = [w for w in re.split(r'\W+', query_str.lower()) if len(w) >= 2]
+    if not q_words:
+        return -999
+    title_hits = sum(1 for w in q_words if w in ct)
+    artist_hits = sum(1 for w in q_words if w in ca)
+    if title_hits == 0:
+        return -999
+    if (title_hits + artist_hits) < min(2, len(q_words)):
+        return -999
+    score = title_hits * 25 + artist_hits * 20
+    if "remix" in ct and "remix" not in raw_lower:
+        score -= 40
+    if "lofi" in ct and "lofi" not in raw_lower:
+        score -= 30
+    return score
 
 def _resolve_saavn_audio(target_query):
     """
-    Resolve full-length 160kbps/320kbps MP4 stream from JioSaavn CDN (aac.saavncdn.com) in ~0.35s.
+    Resolve full-length 160kbps/320kbps MP4 stream from official JioSaavn CDN in ~0.35s.
     Works 100% on cloud datacenter IPs (Render/Railway/AWS) with zero YouTube bot blocking.
     """
-    q_str, want_artist, want_title = _clean_artist_title(target_query)
+    clean_queries = _build_clean_queries(target_query)
     raw_lower = (target_query or "").lower()
 
-    # 1. Fast Saavn API mirror (direct aac.saavncdn.com 160kbps/320kbps MP4 URLs)
-    try:
-        r = HTTP_SESSION.get(
-            "https://saavn.sumit.co/api/search/songs",
-            params={"query": q_str, "limit": 6},
-            timeout=4
-        )
-        if r.status_code == 200:
-            items = ((r.json().get("data") or {}).get("results") or [])
-            for it in items:
-                c_name = _html.unescape(it.get("name") or "")
-                c_dur = int(it.get("duration") or 0)
-                c_artists = ", ".join(
-                    [_html.unescape(a.get("name", "")) for a in ((it.get("artists") or {}).get("primary") or [])]
-                )
-                if _is_valid_saavn_candidate(c_name, c_artists, c_dur, want_artist, want_title, raw_lower):
-                    durls = it.get("downloadUrl") or []
-                    best_url = next(
-                        (u.get("url") for u in durls if u.get("quality") == "160kbps"),
-                        durls[-1].get("url") if durls else None
-                    )
-                    if best_url:
-                        return best_url, "audio/mp4", {}
-    except Exception:
-        pass
-
-    # 2. Official JioSaavn API fallback (www.jiosaavn.com/api.php)
-    try:
-        r = HTTP_SESSION.get(
-            "https://www.jiosaavn.com/api.php",
-            params={
-                "__call": "search.getResults",
-                "_format": "json",
-                "_marker": "0",
-                "api_version": "4",
-                "ctx": "web6dot0",
-                "n": "5",
-                "p": "1",
-                "q": q_str
-            },
-            timeout=4
-        )
-        if r.status_code == 200:
-            results = r.json().get("results") or []
-            for it in results:
-                c_name = _html.unescape(it.get("title") or "")
-                more = it.get("more_info") or {}
-                c_dur = int(more.get("duration") or 0)
-                c_artists = _html.unescape(it.get("subtitle") or "")
-                enc_url = more.get("encrypted_media_url")
-                if enc_url and _is_valid_saavn_candidate(c_name, c_artists, c_dur, want_artist, want_title, raw_lower):
+    # 1. Official JioSaavn API (www.jiosaavn.com/api.php — fastest & most reliable)
+    for q_str in clean_queries[:2]:
+        try:
+            r = HTTP_SESSION.get(
+                "https://www.jiosaavn.com/api.php",
+                params={
+                    "__call": "search.getResults",
+                    "_format": "json",
+                    "_marker": "0",
+                    "api_version": "4",
+                    "ctx": "web6dot0",
+                    "n": "6",
+                    "p": "1",
+                    "q": q_str
+                },
+                timeout=4
+            )
+            if r.status_code == 200:
+                results = r.json().get("results") or []
+                best_enc = None
+                best_score = -1
+                for it in results:
+                    c_name = _html.unescape(it.get("title") or "")
+                    more = it.get("more_info") or {}
+                    c_dur = int(more.get("duration") or 0)
+                    c_artists = _html.unescape(it.get("subtitle") or "")
+                    enc_url = more.get("encrypted_media_url")
+                    if not enc_url:
+                        continue
+                    sc = _score_saavn_item(c_name, c_artists, c_dur, q_str, raw_lower)
+                    if sc > best_score:
+                        best_score = sc
+                        best_enc = enc_url
+                if best_enc and best_score >= 20:
                     r_tok = HTTP_SESSION.get(
                         "https://www.jiosaavn.com/api.php",
                         params={
                             "__call": "song.generateAuthToken",
-                            "url": enc_url,
+                            "url": best_enc,
                             "bitrate": "160",
                             "api_version": "4",
                             "_format": "json",
@@ -983,6 +1006,39 @@ def _resolve_saavn_audio(target_query):
                             return f"https://aac.saavncdn.com{cdn_path}", "audio/mp4", {}
                         if auth_url:
                             return auth_url, "audio/mp4", {}
+        except Exception:
+            pass
+
+    # 2. Secondary Saavn API mirror
+    try:
+        q_str = clean_queries[0]
+        r = HTTP_SESSION.get(
+            "https://saavn.sumit.co/api/search/songs",
+            params={"query": q_str, "limit": 6},
+            timeout=3
+        )
+        if r.status_code == 200:
+            items = ((r.json().get("data") or {}).get("results") or [])
+            best_url = None
+            best_score = -1
+            for it in items:
+                c_name = _html.unescape(it.get("name") or "")
+                c_dur = int(it.get("duration") or 0)
+                c_artists = ", ".join(
+                    [_html.unescape(a.get("name", "")) for a in ((it.get("artists") or {}).get("primary") or [])]
+                )
+                sc = _score_saavn_item(c_name, c_artists, c_dur, q_str, raw_lower)
+                if sc > best_score:
+                    durls = it.get("downloadUrl") or []
+                    u_cand = next(
+                        (u.get("url") for u in durls if u.get("quality") == "160kbps"),
+                        durls[-1].get("url") if durls else None
+                    )
+                    if u_cand:
+                        best_score = sc
+                        best_url = u_cand
+            if best_url and best_score >= 20:
+                return best_url, "audio/mp4", {}
     except Exception:
         pass
 
@@ -990,7 +1046,7 @@ def _resolve_saavn_audio(target_query):
 
 def _resolve_soundcloud_audio(target_query):
     """Resolve full-length progressive MP3 stream from SoundCloud (never blocked on cloud IPs)."""
-    q_str, want_artist, want_title = _clean_artist_title(target_query)
+    q_str = _build_clean_queries(target_query)[0]
     try:
         with _YDL_SC_LOCK:
             info = _YDL_SC.extract_info(f"scsearch3:{q_str}", download=False)
@@ -998,7 +1054,7 @@ def _resolve_soundcloud_audio(target_query):
             if not entry:
                 continue
             dur = entry.get("duration") or 0
-            if dur < 60 or dur > 900:
+            if dur < 40 or dur > 900:
                 continue
             fmts = [
                 f for f in (entry.get("formats") or [])
@@ -1017,7 +1073,7 @@ def _resolve_itunes_fallback(track_id, target_query):
     """Guaranteed high-speed Apple CDN M4A / M4V fallback so cloud streams never 500."""
     audio_url = None
     video_url = None
-    q_str, _, _ = _clean_artist_title(target_query)
+    clean_queries = _build_clean_queries(target_query)
     try:
         if str(track_id).isdigit():
             r = HTTP_SESSION.get(
@@ -1029,26 +1085,29 @@ def _resolve_itunes_fallback(track_id, target_query):
                 res = r.json().get("results") or []
                 if res and res[0].get("previewUrl"):
                     audio_url = res[0]["previewUrl"]
-        if not audio_url and q_str:
-            r = HTTP_SESSION.get(
-                "https://itunes.apple.com/search",
-                params={"term": q_str, "entity": "song", "limit": 2},
-                timeout=4
-            )
-            if r.status_code == 200:
-                res = r.json().get("results") or []
-                if res and res[0].get("previewUrl"):
-                    audio_url = res[0]["previewUrl"]
-        if q_str:
-            rv = HTTP_SESSION.get(
-                "https://itunes.apple.com/search",
-                params={"term": q_str, "entity": "musicVideo", "limit": 2},
-                timeout=4
-            )
-            if rv.status_code == 200:
-                res_v = rv.json().get("results") or []
-                if res_v and res_v[0].get("previewUrl"):
-                    video_url = res_v[0]["previewUrl"]
+        for q_str in clean_queries:
+            if not audio_url:
+                r = HTTP_SESSION.get(
+                    "https://itunes.apple.com/search",
+                    params={"term": q_str, "entity": "song", "limit": 2},
+                    timeout=4
+                )
+                if r.status_code == 200:
+                    res = r.json().get("results") or []
+                    if res and res[0].get("previewUrl"):
+                        audio_url = res[0]["previewUrl"]
+            if not video_url:
+                rv = HTTP_SESSION.get(
+                    "https://itunes.apple.com/search",
+                    params={"term": q_str, "entity": "musicVideo", "limit": 2},
+                    timeout=4
+                )
+                if rv.status_code == 200:
+                    res_v = rv.json().get("results") or []
+                    if res_v and res_v[0].get("previewUrl"):
+                        video_url = res_v[0]["previewUrl"]
+            if audio_url and video_url:
+                break
     except Exception:
         pass
     return audio_url, video_url

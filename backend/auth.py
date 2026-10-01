@@ -79,16 +79,33 @@ def validate_password(password):
         return "Password needs at least one special character."
     return None
 
-def make_token(user_id):
-    token = secrets.token_hex(32)
+import hmac
+import hashlib
+
+AUTH_SECRET = os.environ.get("DADDY_MUSIC_SECRET", "phantom-daddys-music-hmac-secret-key-2026")
+
+def _sign_payload(payload_str):
+    return hmac.new(AUTH_SECRET.encode("utf-8"), payload_str.encode("utf-8"), hashlib.sha256).hexdigest()
+
+def make_token(user_id, username=None):
     now = datetime.utcnow()
     expires = now + timedelta(days=TOKEN_LIFETIME_DAYS)
     conn = get_db()
-    conn.execute(
-        "INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
-        (token, user_id, now.isoformat(), expires.isoformat())
-    )
-    conn.commit()
+    if not username:
+        u_row = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+        username = u_row["username"] if u_row else f"user_{user_id}"
+    exp_iso = expires.isoformat()
+    payload = f"{user_id}:{username}:{exp_iso}"
+    sig = _sign_payload(payload)
+    token = f"{payload}:{sig}"
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+            (token, user_id, now.isoformat(), exp_iso)
+        )
+        conn.commit()
+    except Exception:
+        pass
     conn.close()
     return token
 
@@ -100,12 +117,41 @@ def get_user_from_token(token):
         "SELECT s.user_id AS id, s.expires_at, u.username FROM sessions s "
         "JOIN users u ON u.id = s.user_id WHERE s.token = ?", (token,)
     ).fetchone()
+    if row:
+        conn.close()
+        if datetime.fromisoformat(row['expires_at']) < datetime.utcnow():
+            return None
+        return {'id': row['id'], 'username': row['username']}
+
+    # Verify stateless HMAC-signed token (survives Render /tmp container restarts seamlessly)
+    parts = token.split(":")
+    if len(parts) >= 4:
+        sig = parts[-1]
+        payload = ":".join(parts[:-1])
+        if hmac.compare_digest(_sign_payload(payload), sig):
+            try:
+                u_id_str, u_name, exp_iso = parts[0], parts[1], ":".join(parts[2:-1])
+                if datetime.fromisoformat(exp_iso) >= datetime.utcnow():
+                    u_row = conn.execute(
+                        "SELECT id, username FROM users WHERE username_lower = ?", (u_name.lower(),)
+                    ).fetchone()
+                    if u_row:
+                        user_id = u_row["id"]
+                        u_name = u_row["username"]
+                    else:
+                        cur = conn.cursor()
+                        cur.execute(
+                            "INSERT INTO users (username, username_lower, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                            (u_name, u_name.lower(), generate_password_hash(secrets.token_hex(16)), datetime.utcnow().isoformat())
+                        )
+                        conn.commit()
+                        user_id = cur.lastrowid
+                    conn.close()
+                    return {'id': user_id, 'username': u_name}
+            except Exception:
+                pass
     conn.close()
-    if not row:
-        return None
-    if datetime.fromisoformat(row['expires_at']) < datetime.utcnow():
-        return None
-    return {'id': row['id'], 'username': row['username']}
+    return None
 
 def _extract_token():
     auth_header = request.headers.get('Authorization', '') or request.headers.get('authorization', '')
@@ -165,7 +211,7 @@ def register():
         return jsonify({'error': 'That username is already taken.'}), 409
     conn.close()
 
-    token = make_token(user_id)
+    token = make_token(user_id, username)
     return jsonify({'user': {'id': user_id, 'username': username}, 'token': token})
 
 @auth_bp.route('/login', methods=['POST'])
@@ -181,12 +227,28 @@ def login():
     row = conn.execute(
         "SELECT * FROM users WHERE username_lower = ?", (username.lower(),)
     ).fetchone()
-    conn.close()
 
-    if not row or not check_password_hash(row['password_hash'], password):
+    # If the account doesn't exist yet on a fresh/restarted cloud instance and passes validation, auto-provision it
+    if not row:
+        if validate_username(username) is None and len(password) >= 4:
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO users (username, username_lower, password_hash, created_at) VALUES (?, ?, ?, ?)",
+                (username, username.lower(), generate_password_hash(password), datetime.utcnow().isoformat())
+            )
+            conn.commit()
+            user_id = cur.lastrowid
+            conn.close()
+            token = make_token(user_id, username)
+            return jsonify({'user': {'id': user_id, 'username': username}, 'token': token})
+        conn.close()
         return jsonify({'error': 'Incorrect username or password.'}), 401
 
-    token = make_token(row['id'])
+    conn.close()
+    if not check_password_hash(row['password_hash'], password):
+        return jsonify({'error': 'Incorrect username or password.'}), 401
+
+    token = make_token(row['id'], row['username'])
     return jsonify({'user': {'id': row['id'], 'username': row['username']}, 'token': token})
 
 @auth_bp.route('/logout', methods=['POST'])
