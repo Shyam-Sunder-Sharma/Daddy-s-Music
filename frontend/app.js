@@ -1454,42 +1454,97 @@
   var closeVideoModalBtn = document.getElementById("closeVideoModalBtn");
   var nowTrackClickArea = document.getElementById("nowTrackClickArea");
   var videoStage = document.getElementById("videoStage");
+  var ytVideoIframe = document.getElementById("ytVideoIframe");
+  var currentYtVideoId = null;
+
+  function loadYtIframe(vid, title, channel) {
+    if (currentYtVideoId === vid && ytVideoIframe && ytVideoIframe.getAttribute("src")) {
+      if (videoLoadingOverlay) videoLoadingOverlay.classList.add("hidden");
+      return;
+    }
+    currentYtVideoId = vid;
+    if (ytVideoIframe) {
+      ytVideoIframe.classList.remove("hidden");
+      if (musicVideoEl) musicVideoEl.classList.add("hidden");
+      var origin = window.location.origin;
+      var embedSrc = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(vid)}?autoplay=1&enablejsapi=1&origin=${encodeURIComponent(origin)}&rel=0&playsinline=1`;
+      ytVideoIframe.onload = function () {
+        if (videoLoadingOverlay) videoLoadingOverlay.classList.add("hidden");
+      };
+      ytVideoIframe.src = embedSrc;
+      setTimeout(function () {
+        if (videoLoadingOverlay) videoLoadingOverlay.classList.add("hidden");
+      }, 2500);
+    }
+  }
+
+  function fallbackProgressiveVideo(track, target) {
+    if (!musicVideoEl) {
+      if (videoLoadingOverlay) videoLoadingOverlay.classList.add("hidden");
+      return;
+    }
+    if (ytVideoIframe) ytVideoIframe.classList.add("hidden");
+    musicVideoEl.classList.remove("hidden");
+    var expectedVideoUrl = `${API_BASE}/video?id=${encodeURIComponent(track.id)}&q=${encodeURIComponent(target)}`;
+    musicVideoEl.setAttribute("data-track-id", String(track.id));
+    musicVideoEl.src = expectedVideoUrl;
+    musicVideoEl.playbackRate = state.playbackRate || 1.0;
+    musicVideoEl.load();
+    musicVideoEl.play().catch(function () {});
+  }
 
   function syncMusicVideoStream(forceLoad) {
-    if (!musicVideoEl || !state.currentTrack) return;
+    if (!state.currentTrack) return;
     if (!videoModal || videoModal.classList.contains("hidden")) return;
 
     var track = state.currentTrack;
     var target = track.queryTarget || `${track.artist} - ${track.title}`;
-    var expectedVideoUrl = `${API_BASE}/video?id=${encodeURIComponent(track.id)}&q=${encodeURIComponent(target)}`;
-    var currentVideoAttr = musicVideoEl.getAttribute("data-track-id");
 
-    musicVideoEl.muted = true;
-    musicVideoEl.poster = track.thumbnail || "";
+    if (videoModalTitle) videoModalTitle.textContent = track.title;
+    if (videoModalArtist) videoModalArtist.textContent = track.artist;
 
-    if (currentVideoAttr !== String(track.id) && (forceLoad || !audioEngine.paused)) {
-      if (videoLoadingOverlay) videoLoadingOverlay.classList.remove("hidden");
-      musicVideoEl.setAttribute("data-track-id", String(track.id));
-      musicVideoEl.src = expectedVideoUrl;
-      musicVideoEl.playbackRate = state.playbackRate || 1.0;
-      musicVideoEl.load();
+    if (musicVideoEl) {
+      musicVideoEl.muted = true;
+      musicVideoEl.poster = track.thumbnail || "";
     }
 
-    if (!audioEngine.paused && musicVideoEl.getAttribute("src")) {
-      if (Math.abs((musicVideoEl.currentTime || 0) - (audioEngine.currentTime || 0)) > 0.8) {
-        try {
-          musicVideoEl.currentTime = audioEngine.currentTime || 0;
-        } catch (e) {}
-      }
-      musicVideoEl.play().catch(function () {});
+    if (videoLoadingOverlay) videoLoadingOverlay.classList.remove("hidden");
+
+    // Pause background audio engine while user watches YouTube music video to avoid double audio
+    if (!audioEngine.paused) {
+      audioEngine.pause();
+      state.isPlaying = false;
+      updatePlayerUI();
     }
+
+    // If track.id is already an 11-char YouTube ID, use it directly
+    if (/^[A-Za-z0-9_-]{11}$/.test(String(track.id))) {
+      var vid = String(track.id);
+      loadYtIframe(vid, track.title, track.artist);
+      return;
+    }
+
+    fetch(`${API_BASE}/video-info?id=${encodeURIComponent(track.id)}&q=${encodeURIComponent(target)}`)
+      .then((r) => r.json())
+      .then((info) => {
+        if (info && info.videoId) {
+          if (videoModalTitle && info.title) videoModalTitle.textContent = info.title;
+          if (videoModalArtist && info.channel) videoModalArtist.textContent = info.channel;
+          loadYtIframe(info.videoId, info.title, info.channel);
+        } else {
+          fallbackProgressiveVideo(track, target);
+        }
+      })
+      .catch(() => {
+        fallbackProgressiveVideo(track, target);
+      });
   }
 
   if (musicVideoEl) {
     ["loadeddata", "canplay", "playing"].forEach(function (evName) {
       musicVideoEl.addEventListener(evName, function () {
         if (videoLoadingOverlay) videoLoadingOverlay.classList.add("hidden");
-        if (Math.abs((musicVideoEl.currentTime || 0) - (audioEngine.currentTime || 0)) > 0.8) {
+        if (musicVideoEl.readyState >= 2 && Math.abs((musicVideoEl.currentTime || 0) - (audioEngine.currentTime || 0)) > 0.8) {
           try {
             musicVideoEl.currentTime = audioEngine.currentTime || 0;
           } catch (e) {}
@@ -1509,8 +1564,19 @@
     if (!videoModal) return;
     videoModal.classList.add("hidden");
     if (videoToggleBtn) videoToggleBtn.classList.remove("active");
+    if (ytVideoIframe) {
+      ytVideoIframe.src = "";
+    }
+    currentYtVideoId = null;
     if (musicVideoEl) {
       musicVideoEl.pause();
+    }
+    // Seamlessly resume background audio engine when closing the video
+    if (state.currentTrack && audioEngine.paused) {
+      audioEngine.play().then(() => {
+        state.isPlaying = true;
+        updatePlayerUI();
+      }).catch(function () {});
     }
   }
 
@@ -2185,6 +2251,7 @@
     // Keep muted YouTube video in sync with audioEngine when video modal is open
     if (
       musicVideoEl &&
+      !musicVideoEl.classList.contains("hidden") &&
       videoModal &&
       !videoModal.classList.contains("hidden") &&
       musicVideoEl.getAttribute("src") &&
@@ -2193,7 +2260,7 @@
       if (musicVideoEl.paused && musicVideoEl.readyState >= 2) {
         musicVideoEl.play().catch(function () {});
       }
-      if (Math.abs((musicVideoEl.currentTime || 0) - cur) > 0.85) {
+      if (musicVideoEl.readyState >= 2 && Math.abs((musicVideoEl.currentTime || 0) - cur) > 0.85) {
         try {
           musicVideoEl.currentTime = cur;
         } catch (e) {}
