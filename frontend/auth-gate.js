@@ -48,6 +48,7 @@
   const API_BASE = (IS_LOCAL_SPLIT_PORT ? "http://127.0.0.1:5000" : window.location.origin) + "/api";
   const TOKEN_KEY = "phantom_token";
   const USER_KEY = "phantom_user";
+  const REMEMBER_KEY = "phantom_saved_creds";
 
   var mode = "login";
   var usernameCheckTimer = null;
@@ -72,6 +73,8 @@
     var authSubmit = document.getElementById("authSubmit");
     var switchText = document.getElementById("switchText");
     var switchLink = document.getElementById("switchLink");
+    var remCheckbox = document.getElementById("gateRememberMe");
+    var guestBtn = document.getElementById("guestBtn");
 
     if (!tabLogin || !tabRegister || !form) {
       console.error("Auth Gate: Missing critical DOM elements.");
@@ -157,6 +160,7 @@
         await window.authFetch(API_BASE + "/auth/logout", { method: "POST" });
       } catch (e) {}
       clearSession();
+      try { localStorage.removeItem(REMEMBER_KEY); } catch (e) {}
       // Smoothly switch back to login gate instead of forcing a page reload
       showGate();
       setMode("login");
@@ -337,6 +341,15 @@
         }
 
         setSession(data.token, data.user);
+        if (!remCheckbox || remCheckbox.checked) {
+          try {
+            localStorage.setItem(REMEMBER_KEY, JSON.stringify({ username: username, password: password }));
+          } catch (e) {}
+        } else {
+          try {
+            localStorage.removeItem(REMEMBER_KEY);
+          } catch (e) {}
+        }
         hideGate(data.user);
       } catch (err) {
         authError.textContent = "Couldn't reach the server. Is backend running on port 5000?";
@@ -346,25 +359,58 @@
       }
     });
 
+    if (guestBtn) {
+      guestBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var guestUser = { id: 0, username: "Guest", isGuest: true };
+        setSession("guest_token", guestUser);
+        hideGate(guestUser);
+      });
+    }
+
+    try {
+      var saved = JSON.parse(localStorage.getItem(REMEMBER_KEY) || "null");
+      if (saved && saved.username) {
+        usernameInput.value = saved.username;
+        if (saved.password) passwordInput.value = saved.password;
+      }
+    } catch (e) {}
+
     async function boot() {
       var token = getToken();
-      if (!token) {
-        showGate();
+
+      if (token && token !== "guest_token") {
+        try {
+          var res = await window.authFetch(API_BASE + "/auth/me");
+          if (res && res.ok) {
+            var data = await res.json();
+            hideGate(data.user);
+            return;
+          }
+        } catch (e) {}
+      } else if (token === "guest_token") {
+        hideGate({ id: 0, username: "Guest", isGuest: true });
         return;
       }
+
+      // If token expired or container restarted, attempt automatic background login with remembered credentials
       try {
-        var res = await window.authFetch(API_BASE + "/auth/me");
-        if (res && res.ok) {
-          var data = await res.json();
-          hideGate(data.user);
-          return;
+        var savedCreds = JSON.parse(localStorage.getItem(REMEMBER_KEY) || "null");
+        if (savedCreds && savedCreds.username && savedCreds.password) {
+          var resAuto = await fetch(API_BASE + "/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: savedCreds.username, password: savedCreds.password })
+          });
+          if (resAuto && resAuto.ok) {
+            var autoData = await resAuto.json();
+            setSession(autoData.token, autoData.user);
+            hideGate(autoData.user);
+            return;
+          }
         }
-        if (res && res.status === 401) {
-          clearSession();
-          showGate();
-          return;
-        }
-      } catch (e) {}
+      } catch (err) {}
 
       // If backend is temporarily unreachable but cached user exists, keep session alive
       try {

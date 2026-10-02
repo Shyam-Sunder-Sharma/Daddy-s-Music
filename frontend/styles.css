@@ -1236,6 +1236,74 @@ body.gate-active .app {
   cursor: not-allowed;
 }
 
+.auth-remember-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 14px;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.auth-remember-row label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.auth-remember-row input[type="checkbox"] {
+  accent-color: var(--brand);
+  cursor: pointer;
+  width: 15px;
+  height: 15px;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  margin: 16px 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.auth-divider span:first-child,
+.auth-divider span:last-child {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.auth-divider span:nth-child(2) {
+  padding: 0 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.auth-guest-btn {
+  width: 100%;
+  background: var(--bg-card);
+  color: var(--text-main);
+  border: 1px solid var(--border);
+  padding: 11px 16px;
+  border-radius: 9999px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+}
+
+.auth-guest-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.auth-guest-btn:active {
+  transform: scale(0.99);
+}
+
 .auth-switch {
   text-align: center;
   font-size: 0.85rem;

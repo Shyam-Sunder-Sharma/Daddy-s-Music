@@ -831,7 +831,24 @@ def _pick_best_formats(info):
             audio_only.sort(key=lambda x: x.get('tbr') or x.get('abr') or 999)
             chosen_a = audio_only[0]
             audio_url = chosen_a['url']
-            audio_mime = 'audio/mp4' if chosen_a.get('ext') == 'm4a' else 'audio/webm'
+            audio_mime = 'audio/mp4' if chosen_a.get('ext') in ('m4a', 'mp4') else 'audio/webm'
+            audio_headers = dict(chosen_a.get('http_headers') or {})
+
+    # Format 18 (progressive MP4) contains full-length AAC audio and streams on all clients
+    if not audio_url and '18' in by_id:
+        f18 = by_id['18']
+        audio_url = f18['url']
+        audio_mime = 'audio/mp4'
+        audio_headers = dict(f18.get('http_headers') or {})
+
+    # Any format containing audio
+    if not audio_url:
+        with_audio = [f for f in formats if f.get('acodec') != 'none']
+        if with_audio:
+            with_audio.sort(key=lambda x: x.get('tbr') or x.get('abr') or 999)
+            chosen_a = with_audio[0]
+            audio_url = chosen_a['url']
+            audio_mime = 'audio/mp4' if chosen_a.get('ext') in ('m4a', 'mp4') else 'audio/webm'
             audio_headers = dict(chosen_a.get('http_headers') or {})
 
     # 2. Pick compact fast-streaming video stream for #videoModal (240p/144p = 8-17 KB/s)
@@ -862,11 +879,11 @@ def _pick_best_formats(info):
 
     if not audio_url and video_url:
         audio_url = video_url
-        audio_mime = video_mime
+        audio_mime = 'audio/mp4' if 'mp4' in video_mime else 'audio/webm'
         audio_headers = video_headers
     if not video_url and audio_url:
         video_url = audio_url
-        video_mime = audio_mime
+        video_mime = 'video/mp4' if 'mp4' in audio_mime else 'video/webm'
         video_headers = audio_headers
 
     return audio_url, audio_mime, audio_headers, video_url, video_mime, video_headers
@@ -1070,32 +1087,11 @@ def _resolve_soundcloud_audio(target_query):
     return None, None, None
 
 def _resolve_itunes_fallback(track_id, target_query):
-    """Guaranteed high-speed Apple CDN M4A / M4V fallback so cloud streams never 500."""
-    audio_url = None
+    """Guaranteed high-speed Apple CDN M4V video fallback for video modal only."""
     video_url = None
     clean_queries = _build_clean_queries(target_query)
     try:
-        if str(track_id).isdigit():
-            r = HTTP_SESSION.get(
-                "https://itunes.apple.com/lookup",
-                params={"id": str(track_id)},
-                timeout=4
-            )
-            if r.status_code == 200:
-                res = r.json().get("results") or []
-                if res and res[0].get("previewUrl"):
-                    audio_url = res[0]["previewUrl"]
         for q_str in clean_queries:
-            if not audio_url:
-                r = HTTP_SESSION.get(
-                    "https://itunes.apple.com/search",
-                    params={"term": q_str, "entity": "song", "limit": 2},
-                    timeout=4
-                )
-                if r.status_code == 200:
-                    res = r.json().get("results") or []
-                    if res and res[0].get("previewUrl"):
-                        audio_url = res[0]["previewUrl"]
             if not video_url:
                 rv = HTTP_SESSION.get(
                     "https://itunes.apple.com/search",
@@ -1106,11 +1102,11 @@ def _resolve_itunes_fallback(track_id, target_query):
                     res_v = rv.json().get("results") or []
                     if res_v and res_v[0].get("previewUrl"):
                         video_url = res_v[0]["previewUrl"]
-            if audio_url and video_url:
+            if video_url:
                 break
     except Exception:
         pass
-    return audio_url, video_url
+    return None, video_url
 
 def resolve_track_streams(target_query, track_id, force_refresh=False, need_video=False):
     """Resolve audio and video stream URLs with multi-tier cloud fallback and lock deduplication."""
@@ -1153,45 +1149,58 @@ def resolve_track_streams(target_query, track_id, force_refresh=False, need_vide
                 STREAM_CACHE[track_id] = entry_data
                 return entry_data
 
-        # Tier 2: Try YouTube multi-client extractors (Node, Android, TV/iOS/MWeb)
-        mv_query = _build_mv_search_query(target_query)
-        video_id = fast_search_youtube_video_id(mv_query)
-        if not video_id and re.match(r'^[A-Za-z0-9_-]{11}$', str(track_id)):
+        # Tier 2: Try YouTube multi-client extractors (Android client #1 priority - never bot-blocked)
+        video_id = None
+        if re.match(r'^[A-Za-z0-9_-]{11}$', str(track_id)):
             video_id = str(track_id)
+        else:
+            search_q = _build_mv_search_query(target_query) if need_video else (_build_clean_queries(target_query)[0] if target_query else str(track_id))
+            video_id = fast_search_youtube_video_id(search_q)
 
-        yt_target = f"https://www.youtube.com/watch?v={video_id}" if video_id else f"ytsearch1:{mv_query}"
+        yt_targets = []
+        if video_id:
+            yt_targets.append(f"https://www.youtube.com/watch?v={video_id}")
 
+        clean_qs = _build_clean_queries(target_query)
+        if need_video:
+            yt_targets.append(f"ytsearch1:{_build_mv_search_query(target_query)}")
+        else:
+            for cq in clean_qs[:2]:
+                yt_targets.append(f"ytsearch1:{cq}")
+
+        # Android client MUST be first because it bypasses datacenter IP blocks completely
         for ydl_inst, ydl_lock in [
-            (_YDL_NODE, _YDL_NODE_LOCK),
             (_YDL_ANDROID, _YDL_ANDROID_LOCK),
-            (_YDL_TV_IOS, _YDL_TV_LOCK)
+            (_YDL_TV_IOS, _YDL_TV_LOCK),
+            (_YDL_NODE, _YDL_NODE_LOCK)
         ]:
-            try:
-                with ydl_lock:
-                    info = ydl_inst.extract_info(yt_target, download=False)
-                if info and 'entries' in info and info['entries']:
-                    info = info['entries'][0]
-                if info:
-                    a_url, a_mime, a_hdrs, v_url, v_mime, v_hdrs = _pick_best_formats(info)
-                    if a_url or v_url:
-                        prev_cached = STREAM_CACHE.get(track_id) or {}
-                        final_a_url = prev_cached.get('audio_url') or a_url or v_url
-                        final_a_mime = prev_cached.get('audio_mime') or a_mime or v_mime
-                        final_a_hdrs = prev_cached.get('audio_headers') if prev_cached.get('audio_url') else (a_hdrs or v_hdrs)
-                        entry_data = {
-                            'audio_url': final_a_url,
-                            'audio_mime': final_a_mime,
-                            'audio_headers': final_a_hdrs,
-                            'video_url': v_url or final_a_url,
-                            'video_mime': v_mime if v_url else final_a_mime,
-                            'video_headers': v_hdrs if v_url else final_a_hdrs,
-                            'needs_yt_video': False,
-                            'ts': time.time()
-                        }
-                        STREAM_CACHE[track_id] = entry_data
-                        return entry_data
-            except Exception as e:
-                print(f"YouTube extractor note ({e}), trying next tier...")
+            for yt_target in yt_targets:
+                try:
+                    with ydl_lock:
+                        info = ydl_inst.extract_info(yt_target, download=False)
+                    if info and 'entries' in info and info['entries']:
+                        info = info['entries'][0]
+                    if info:
+                        a_url, a_mime, a_hdrs, v_url, v_mime, v_hdrs = _pick_best_formats(info)
+                        if a_url or v_url:
+                            prev_cached = STREAM_CACHE.get(track_id) or {}
+                            final_a_url = prev_cached.get('audio_url') or a_url or v_url
+                            final_a_mime = prev_cached.get('audio_mime') or a_mime or v_mime
+                            final_a_hdrs = prev_cached.get('audio_headers') if prev_cached.get('audio_url') else (a_hdrs or v_hdrs)
+                            entry_data = {
+                                'audio_url': final_a_url,
+                                'audio_mime': final_a_mime,
+                                'audio_headers': final_a_hdrs,
+                                'video_url': v_url or final_a_url,
+                                'video_mime': v_mime if v_url else final_a_mime,
+                                'video_headers': v_hdrs if v_url else final_a_hdrs,
+                                'needs_yt_video': False,
+                                'ts': time.time()
+                            }
+                            STREAM_CACHE[track_id] = entry_data
+                            return entry_data
+                except Exception:
+                    pass
 
         # Tier 3: Try SoundCloud full-length progressive MP3 stream (works on all cloud datacenter IPs)
         if not need_video:
@@ -1210,24 +1219,23 @@ def resolve_track_streams(target_query, track_id, force_refresh=False, need_vide
                 STREAM_CACHE[track_id] = entry_data
                 return entry_data
 
-        # Tier 4: Guaranteed Apple iTunes M4A / M4V CDN fallback so /api/stream & /api/video never 500
-        it_audio, it_video = _resolve_itunes_fallback(track_id, target_query)
-        prev_cached = STREAM_CACHE.get(track_id) or {}
-        final_audio = prev_cached.get('audio_url') or saavn_url or it_audio or it_video
-        final_video = it_video or prev_cached.get('video_url') or final_audio
-        if final_audio:
-            entry_data = {
-                'audio_url': final_audio,
-                'audio_mime': prev_cached.get('audio_mime') or 'audio/mp4',
-                'audio_headers': {},
-                'video_url': final_video,
-                'video_mime': 'video/mp4' if it_video else (prev_cached.get('video_mime') or 'audio/mp4'),
-                'video_headers': {},
-                'needs_yt_video': False,
-                'ts': time.time()
-            }
-            STREAM_CACHE[track_id] = entry_data
-            return entry_data
+        # Tier 4: For video requests only, check Apple iTunes M4V video fallback
+        if need_video:
+            _, it_video = _resolve_itunes_fallback(track_id, target_query)
+            if it_video:
+                prev_cached = STREAM_CACHE.get(track_id) or {}
+                entry_data = {
+                    'audio_url': prev_cached.get('audio_url') or saavn_url,
+                    'audio_mime': prev_cached.get('audio_mime') or 'audio/mp4',
+                    'audio_headers': {},
+                    'video_url': it_video,
+                    'video_mime': 'video/mp4',
+                    'video_headers': {},
+                    'needs_yt_video': False,
+                    'ts': time.time()
+                }
+                STREAM_CACHE[track_id] = entry_data
+                return entry_data
 
         return None
 
@@ -1347,7 +1355,20 @@ class ProgressiveStreamBuffer:
 
                         with self.cond:
                             if not self.headers_ready:
-                                self.content_type = r.headers.get('Content-Type') or self.default_mime
+                                if self.kind == "audio":
+                                    up_ct = (r.headers.get('Content-Type') or self.default_mime or '').lower()
+                                    if 'mp4' in up_ct or 'm4a' in up_ct:
+                                        self.content_type = 'audio/mp4'
+                                    elif 'webm' in up_ct:
+                                        self.content_type = 'audio/webm'
+                                    elif 'mpeg' in up_ct or 'mp3' in up_ct:
+                                        self.content_type = 'audio/mpeg'
+                                    elif 'ogg' in up_ct:
+                                        self.content_type = 'audio/ogg'
+                                    else:
+                                        self.content_type = 'audio/mp4'
+                                else:
+                                    self.content_type = r.headers.get('Content-Type') or self.default_mime
                                 cr = r.headers.get('Content-Range', '')
                                 if '/' in cr:
                                     try:
@@ -1550,12 +1571,16 @@ def serve_progressive_stream(track_id, query_target, kind="audio", transcode=Fal
             elif total_size > 0:
                 end = total_size - 1
 
+    out_ct = buf_obj.content_type
+    if kind == "audio" and not out_ct.startswith("audio/"):
+        out_ct = "audio/mp4" if "mp4" in out_ct else "audio/webm"
+
     # If browser probes the tail or user seeks far ahead (> 256 KB past current buffer),
     # stream that range using an isolated private session so it never disturbs buf_obj's worker session
     if start > len(buf_obj.buf) + 262144 and not buf_obj.completed:
         target_end = end if end is not None else ((total_size - 1) if total_size > 0 else "")
         resp_headers = {
-            'Content-Type': buf_obj.content_type,
+            'Content-Type': out_ct,
             'Accept-Ranges': 'bytes',
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, OPTIONS',
@@ -1616,7 +1641,7 @@ def serve_progressive_stream(track_id, query_target, kind="audio", transcode=Fal
         return Response(generate_direct_range(), status=206 if range_header else 200, headers=resp_headers)
 
     resp_headers = {
-        'Content-Type': buf_obj.content_type,
+        'Content-Type': out_ct,
         'Accept-Ranges': 'bytes',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
