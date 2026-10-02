@@ -585,13 +585,14 @@ _YDL_NODE = yt_dlp.YoutubeDL({
     'quiet': True,
     'no_warnings': True,
     'noplaylist': True,
-    'js_runtimes': {'node': {}}
+    'socket_timeout': 6
 })
 
 _YDL_ANDROID = yt_dlp.YoutubeDL({
     'quiet': True,
     'no_warnings': True,
     'noplaylist': True,
+    'socket_timeout': 6,
     'extractor_args': {
         'youtube': {
             'player_client': ['android'],
@@ -604,6 +605,7 @@ _YDL_TV_IOS = yt_dlp.YoutubeDL({
     'quiet': True,
     'no_warnings': True,
     'noplaylist': True,
+    'socket_timeout': 6,
     'extractor_args': {
         'youtube': {
             'player_client': ['tv_embedded', 'ios', 'mweb']
@@ -614,20 +616,24 @@ _YDL_TV_IOS = yt_dlp.YoutubeDL({
 _YDL_SC = yt_dlp.YoutubeDL({
     'quiet': True,
     'no_warnings': True,
-    'noplaylist': True
+    'noplaylist': True,
+    'socket_timeout': 6
 })
 
 def _warmup_extractors_bg():
     """Pre-warm DNS, TLS session pool, SoundCloud client_id, and yt-dlp at server startup."""
     try:
-        fast_search_youtube_video_id("Ed Sheeran Shape of You official music video")
-        with _YDL_SC_LOCK:
-            _YDL_SC.extract_info("scsearch1:Shape of You", download=False)
+        fast_search_youtube_video_id("Ed Sheeran Shape of You")
     except Exception:
         pass
     try:
-        with _YDL_NODE_LOCK:
-            _YDL_NODE.extract_info("https://www.youtube.com/watch?v=JGwWNGJdvx8", download=False)
+        with _YDL_ANDROID_LOCK:
+            _YDL_ANDROID.extract_info("https://www.youtube.com/watch?v=JGwWNGJdvx8", download=False)
+    except Exception:
+        pass
+    try:
+        with _YDL_SC_LOCK:
+            _YDL_SC.extract_info("scsearch1:Shape of You", download=False)
     except Exception:
         pass
 
@@ -772,31 +778,38 @@ def fast_search_youtube_video_id(query):
     if q_key in SEARCH_ID_CACHE:
         return SEARCH_ID_CACHE[q_key]
 
-    try:
-        resp = HTTP_SESSION.post(
-            "https://www.youtube.com/youtubei/v1/search?prettyPrint=false",
-            json={
-                "context": {
-                    "client": {
-                        "clientName": "WEB",
-                        "clientVersion": "2.20250312.04.00",
-                        "hl": "en",
-                        "gl": "US"
-                    }
-                },
-                "query": query,
-                "params": "EgIQAQ%3D%3D"  # Filter: Videos only
-            },
-            timeout=4
-        )
-        if resp.status_code == 200:
-            matches = re.findall(r'"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"', resp.text)
-            if matches:
-                vid = matches[0]
-                SEARCH_ID_CACHE[q_key] = vid
-                return vid
-    except Exception as e:
-        print("InnerTube fast search note:", e)
+    clean_queries = _build_clean_queries(query)
+    candidates = [query]
+    for cq in clean_queries:
+        if cq not in candidates:
+            candidates.append(cq)
+
+    for cand in candidates[:2]:
+        for client_name in ["WEB", "MWEB"]:
+            try:
+                resp = HTTP_SESSION.post(
+                    "https://www.youtube.com/youtubei/v1/search?prettyPrint=false",
+                    json={
+                        "context": {
+                            "client": {
+                                "clientName": client_name,
+                                "clientVersion": "2.20250312.04.00",
+                                "hl": "en",
+                                "gl": "US"
+                            }
+                        },
+                        "query": cand
+                    },
+                    timeout=3
+                )
+                if resp.status_code == 200:
+                    matches = re.findall(r'"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"', resp.text)
+                    if matches:
+                        vid = matches[0]
+                        SEARCH_ID_CACHE[q_key] = vid
+                        return vid
+            except Exception:
+                pass
 
     return None
 
@@ -1087,26 +1100,47 @@ def _resolve_soundcloud_audio(target_query):
     return None, None, None
 
 def _resolve_itunes_fallback(track_id, target_query):
-    """Guaranteed high-speed Apple CDN M4V video fallback for video modal only."""
+    """Guaranteed high-speed Apple CDN M4A / M4V fallback so cloud streams never 500."""
+    audio_url = None
     video_url = None
     clean_queries = _build_clean_queries(target_query)
     try:
+        if str(track_id).isdigit():
+            r = HTTP_SESSION.get(
+                "https://itunes.apple.com/lookup",
+                params={"id": str(track_id)},
+                timeout=3
+            )
+            if r.status_code == 200:
+                res = r.json().get("results") or []
+                if res and res[0].get("previewUrl"):
+                    audio_url = res[0]["previewUrl"]
         for q_str in clean_queries:
+            if not audio_url:
+                r = HTTP_SESSION.get(
+                    "https://itunes.apple.com/search",
+                    params={"term": q_str, "entity": "song", "limit": 2},
+                    timeout=3
+                )
+                if r.status_code == 200:
+                    res = r.json().get("results") or []
+                    if res and res[0].get("previewUrl"):
+                        audio_url = res[0]["previewUrl"]
             if not video_url:
                 rv = HTTP_SESSION.get(
                     "https://itunes.apple.com/search",
                     params={"term": q_str, "entity": "musicVideo", "limit": 2},
-                    timeout=4
+                    timeout=3
                 )
                 if rv.status_code == 200:
                     res_v = rv.json().get("results") or []
                     if res_v and res_v[0].get("previewUrl"):
                         video_url = res_v[0]["previewUrl"]
-            if video_url:
+            if audio_url and video_url:
                 break
     except Exception:
         pass
-    return None, video_url
+    return audio_url, video_url
 
 def resolve_track_streams(target_query, track_id, force_refresh=False, need_video=False):
     """Resolve audio and video stream URLs with multi-tier cloud fallback and lock deduplication."""
@@ -1154,25 +1188,22 @@ def resolve_track_streams(target_query, track_id, force_refresh=False, need_vide
         if re.match(r'^[A-Za-z0-9_-]{11}$', str(track_id)):
             video_id = str(track_id)
         else:
-            search_q = _build_mv_search_query(target_query) if need_video else (_build_clean_queries(target_query)[0] if target_query else str(track_id))
-            video_id = fast_search_youtube_video_id(search_q)
+            video_id = fast_search_youtube_video_id(target_query)
 
         yt_targets = []
         if video_id:
             yt_targets.append(f"https://www.youtube.com/watch?v={video_id}")
-
-        clean_qs = _build_clean_queries(target_query)
-        if need_video:
-            yt_targets.append(f"ytsearch1:{_build_mv_search_query(target_query)}")
         else:
-            for cq in clean_qs[:2]:
-                yt_targets.append(f"ytsearch1:{cq}")
+            clean_qs = _build_clean_queries(target_query)
+            if need_video:
+                yt_targets.append(f"ytsearch1:{_build_mv_search_query(target_query)}")
+            else:
+                yt_targets.append(f"ytsearch1:{clean_qs[0] if clean_qs else target_query}")
 
         # Android client MUST be first because it bypasses datacenter IP blocks completely
         for ydl_inst, ydl_lock in [
             (_YDL_ANDROID, _YDL_ANDROID_LOCK),
-            (_YDL_TV_IOS, _YDL_TV_LOCK),
-            (_YDL_NODE, _YDL_NODE_LOCK)
+            (_YDL_TV_IOS, _YDL_TV_LOCK)
         ]:
             for yt_target in yt_targets:
                 try:
@@ -1219,23 +1250,24 @@ def resolve_track_streams(target_query, track_id, force_refresh=False, need_vide
                 STREAM_CACHE[track_id] = entry_data
                 return entry_data
 
-        # Tier 4: For video requests only, check Apple iTunes M4V video fallback
-        if need_video:
-            _, it_video = _resolve_itunes_fallback(track_id, target_query)
-            if it_video:
-                prev_cached = STREAM_CACHE.get(track_id) or {}
-                entry_data = {
-                    'audio_url': prev_cached.get('audio_url') or saavn_url,
-                    'audio_mime': prev_cached.get('audio_mime') or 'audio/mp4',
-                    'audio_headers': {},
-                    'video_url': it_video,
-                    'video_mime': 'video/mp4',
-                    'video_headers': {},
-                    'needs_yt_video': False,
-                    'ts': time.time()
-                }
-                STREAM_CACHE[track_id] = entry_data
-                return entry_data
+        # Tier 4: Guaranteed Apple iTunes M4A / M4V fallback so /api/stream & /api/video never 500
+        it_audio, it_video = _resolve_itunes_fallback(track_id, target_query)
+        prev_cached = STREAM_CACHE.get(track_id) or {}
+        final_audio = prev_cached.get('audio_url') or saavn_url or it_audio or it_video
+        final_video = it_video or prev_cached.get('video_url') or final_audio
+        if final_audio:
+            entry_data = {
+                'audio_url': final_audio,
+                'audio_mime': prev_cached.get('audio_mime') or 'audio/mp4',
+                'audio_headers': {},
+                'video_url': final_video,
+                'video_mime': 'video/mp4' if it_video else (prev_cached.get('video_mime') or 'audio/mp4'),
+                'video_headers': {},
+                'needs_yt_video': False,
+                'ts': time.time()
+            }
+            STREAM_CACHE[track_id] = entry_data
+            return entry_data
 
         return None
 
