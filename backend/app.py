@@ -2010,6 +2010,23 @@ def get_video_info():
     return response
 
 
+@app.route('/api/yt-extract-test', methods=['GET'])
+def test_yt_extract():
+    vid = request.args.get('id', 'JGwWNGJdvx8')
+    try:
+        with _YDL_ANDROID_LOCK:
+            info = _YDL_ANDROID.extract_info(f"https://www.youtube.com/watch?v={vid}", download=False)
+        formats = [f for f in info.get('formats', []) if f.get('url')]
+        return jsonify({
+            'success': True,
+            'title': info.get('title'),
+            'formats_count': len(formats),
+            'formats': [(f.get('format_id'), f.get('ext'), f.get('vcodec'), f.get('acodec')) for f in formats]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e), 'type': type(e).__name__})
+
+
 @app.route('/api/video', methods=['GET', 'OPTIONS'])
 def get_video_stream():
     if request.method == 'OPTIONS':
