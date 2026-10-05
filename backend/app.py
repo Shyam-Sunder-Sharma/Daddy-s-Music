@@ -379,8 +379,7 @@ def search_youtube_fallback(query):
                 title = entry.get('title', 'Unknown Title')
                 artist = entry.get('uploader') or entry.get('channel') or 'Unknown Artist'
 
-                thumbnails = entry.get('thumbnails') or []
-                thumbnail = thumbnails[-1].get('url') if thumbnails else f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg"
+                thumbnail = f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg"
 
                 tracks.append({
                     'id': str(vid_id),
@@ -405,7 +404,13 @@ def search_youtube_innertube(query, limit=20):
     tracks = []
     seen = set()
 
-    # Search YouTube directly via lightweight InnerTube JSON API
+    q_clean = query.strip()
+    q_lower = q_clean.lower()
+    # Enhance queries lacking music keywords so YouTube targets songs rather than compilations or talk
+    search_q = q_clean
+    if not any(w in q_lower for w in ['song', 'songs', 'music', 'track', 'audio', 'video', 'ost', 'remix', 'soundtrack']):
+        search_q = f"{q_clean} song"
+
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Content-Type': 'application/json',
@@ -419,8 +424,16 @@ def search_youtube_innertube(query, limit=20):
                 'gl': 'US'
             }
         },
-        'query': query
+        'query': search_q
     }
+
+    NON_SONG_WORDS = [
+        'reaction', 'reacts to', 'react to', 'review', 'interview', 'podcast',
+        'behind the scenes', 'making of', 'vlog', 'trailer', 'teaser',
+        'unboxing', 'full movie', 'gameplay', 'walkthrough', 'tutorial',
+        'parody', 'funny moments', 'roast', 'whatsapp status', 'status video'
+    ]
+
     try:
         resp = HTTP_SESSION.post(
             'https://www.youtube.com/youtubei/v1/search?prettyPrint=false',
@@ -440,7 +453,6 @@ def search_youtube_innertube(query, limit=20):
                     vid = vr.get('videoId')
                     if not vid or vid in seen or not re.match(r'^[A-Za-z0-9_-]{11}$', vid):
                         continue
-                    seen.add(vid)
 
                     title = ''.join([t.get('text', '') for t in vr.get('title', {}).get('runs', [])])
                     channel = ''.join([t.get('text', '') for t in vr.get('ownerText', {}).get('runs', [])])
@@ -453,12 +465,26 @@ def search_youtube_innertube(query, limit=20):
                         elif len(parts) == 3:
                             dur_sec = parts[0] * 3600 + parts[1] * 60 + parts[2]
 
+                    # 1. Filter out live streams
                     badges = [b.get('metadataBadgeRenderer', {}).get('style', '') or b.get('metadataBadgeRenderer', {}).get('label', '') for b in vr.get('badges', [])]
                     if 'LIVE' in str(badges) or 'BADGE_STYLE_TYPE_LIVE_NOW' in str(badges):
                         continue
 
-                    thumbs = vr.get('thumbnail', {}).get('thumbnails', [])
-                    thumb = thumbs[-1].get('url') if thumbs else f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg'
+                    # 2. Filter out non-song durations (under 45s shorts/memes or over 11 mins compilations/podcasts)
+                    if dur_sec > 0 and (dur_sec < 45 or dur_sec > 660):
+                        if not any(w in q_lower for w in ['album', 'mix', 'jukebox', 'compilation', 'playlist']):
+                            continue
+
+                    # 3. Filter out random non-song videos (reactions, reviews, podcasts, vlogs, trailers)
+                    t_lower = title.lower()
+                    if any(nw in t_lower for nw in NON_SONG_WORDS):
+                        if not any(nw in q_lower for nw in NON_SONG_WORDS):
+                            continue
+
+                    seen.add(vid)
+
+                    # Always use permanent canonical static thumbnail URL to avoid expiring hq720 404s
+                    thumb = f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg'
 
                     tracks.append({
                         'id': vid,

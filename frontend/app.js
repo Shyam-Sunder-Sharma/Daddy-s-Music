@@ -1480,12 +1480,14 @@
       ytPlayer = new YT.Player("ytPlayerContainer", {
         height: "100%",
         width: "100%",
+        host: "https://www.youtube-nocookie.com",
         playerVars: {
           autoplay: 1,
           controls: 1,
           disablekb: 0,
           fs: 1,
           iv_load_policy: 3,
+          cc_load_policy: 0,
           modestbranding: 1,
           playsinline: 1,
           rel: 0,
@@ -3471,13 +3473,62 @@
     });
   }
 
+  // ---------- Mobile Navigation Drawer & Image Fallback ----------
+  var mobileMenuBtn = document.getElementById("mobileMenuBtn");
+  var mobileNavBackdrop = document.getElementById("mobileNavBackdrop");
+  var navEl = document.querySelector(".nav");
+
+  function closeMobileNav() {
+    if (navEl) navEl.classList.remove("mobile-open");
+    if (mobileNavBackdrop) mobileNavBackdrop.classList.remove("active");
+  }
+
+  function toggleMobileNav() {
+    if (!navEl) return;
+    var isOpen = navEl.classList.toggle("mobile-open");
+    if (mobileNavBackdrop) mobileNavBackdrop.classList.toggle("active", isOpen);
+  }
+
+  if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleMobileNav();
+    });
+  }
+
+  if (mobileNavBackdrop) {
+    mobileNavBackdrop.addEventListener("click", closeMobileNav);
+  }
+
+  document.querySelectorAll(".nav-item").forEach(function (item) {
+    item.addEventListener("click", function () {
+      if (window.innerWidth <= 860) {
+        closeMobileNav();
+      }
+    });
+  });
+
+  // Global Image error fallback so expired hq720 thumbnails cleanly fallback to canonical static hqdefault
+  document.addEventListener("error", function (e) {
+    var target = e.target;
+    if (target && target.tagName === "IMG" && !target.dataset.triedFallback) {
+      target.dataset.triedFallback = "1";
+      var src = target.getAttribute("src") || "";
+      var m = src.match(/\/vi\/([A-Za-z0-9_-]{11})\//);
+      if (m && m[1]) {
+        target.src = "https://i.ytimg.com/vi/" + m[1] + "/hqdefault.jpg";
+      }
+    }
+  }, true);
+
   // ---------- PWA Service Worker Registration ----------
   if ("serviceWorker" in navigator && (window.location.protocol === "http:" || window.location.protocol === "https:")) {
     window.addEventListener("load", function () {
       if ("caches" in window) {
         caches.keys().then(function (keys) {
           keys.forEach(function (k) {
-            if (k !== "daddy-music-shell-v12") {
+            if (k !== "daddy-music-shell-v16") {
               caches.delete(k).catch(function () {});
             }
           });
