@@ -131,23 +131,43 @@
 
     function renderUserChip(user) {
       var container = document.getElementById("authNavbarContainer");
-      if (!container) return;
-      container.innerHTML = "";
-      var chip = document.createElement("div");
-      chip.className = "user-chip";
-      chip.innerHTML = '<span>Signed in as <strong>' + escapeHtml(user.username) + "</strong></span>";
-      
-      var logoutBtn = document.createElement("button");
-      logoutBtn.className = "btn-link-danger";
-      logoutBtn.type = "button";
-      logoutBtn.textContent = "Logout";
-      logoutBtn.addEventListener("click", function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        logout();
-      });
-      chip.appendChild(logoutBtn);
-      container.appendChild(chip);
+      if (container) {
+        container.innerHTML = "";
+        var chip = document.createElement("div");
+        chip.className = "user-chip";
+        chip.innerHTML = '<span>Signed in as <strong>' + escapeHtml(user.username) + "</strong></span>";
+        
+        var logoutBtn = document.createElement("button");
+        logoutBtn.className = "btn-link-danger";
+        logoutBtn.type = "button";
+        logoutBtn.textContent = "Logout";
+        logoutBtn.addEventListener("click", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          logout();
+        });
+        chip.appendChild(logoutBtn);
+        container.appendChild(chip);
+      }
+
+      var navUserBox = document.getElementById("navUserBox");
+      var navUsername = document.getElementById("navUsername");
+      var navUserAvatar = document.getElementById("navUserAvatar");
+      var navLogoutBtn = document.getElementById("navLogoutBtn");
+      if (navUserBox && navUsername && navUserAvatar) {
+        var uname = user && user.username ? String(user.username) : "User";
+        navUsername.textContent = uname;
+        navUserAvatar.textContent = uname.charAt(0).toUpperCase();
+        navUserBox.style.display = "flex";
+      }
+      if (navLogoutBtn && !navLogoutBtn.dataset.bound) {
+        navLogoutBtn.dataset.bound = "1";
+        navLogoutBtn.addEventListener("click", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          logout();
+        });
+      }
     }
 
     function escapeHtml(str) {

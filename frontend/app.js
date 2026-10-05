@@ -748,6 +748,15 @@
       }
     }
 
+    if (state.view.type === "queue") {
+      baseList = (state.queue || []).slice();
+      viewTitle.textContent = "Up Next (Queue)";
+      viewHint.textContent = baseList.length
+        ? baseList.length + " track(s) scheduled to play next."
+        : "Your queue is currently empty. Tap the + icon on any track to add it here.";
+      return state.searchQuery ? filterAndRankTracksFuzzy(baseList, state.searchQuery) : baseList;
+    }
+
     if (state.searchQuery) {
       viewTitle.textContent = 'Results for "' + state.searchQuery + '"';
       viewHint.textContent = state.searchResults.length + " track(s) found.";
@@ -918,13 +927,15 @@
   function updateViewActions(list) {
     var isBrowseHistory = state.view.type === "browse" && !state.searchQuery && list.length > 0;
     var isPlaylistView = state.view.type === "playlist";
+    var isQueueView = state.view.type === "queue";
     var isSavedList =
       (state.view.type === "favorites" ||
         state.view.type === "playlist" ||
+        state.view.type === "queue" ||
         state.view.type.startsWith("smart-")) &&
       list.length > 0;
 
-    if (isBrowseHistory || isSavedList || isPlaylistView) {
+    if (isBrowseHistory || isSavedList || isPlaylistView || isQueueView) {
       viewActionsContainer.innerHTML = "";
       viewActionsContainer.style.display = "flex";
 
@@ -1016,6 +1027,29 @@
           renderTracks();
         };
         viewActionsContainer.appendChild(clearBtn);
+      }
+
+      if (isQueueView && list.length > 0) {
+        var clearQBtn = document.createElement("button");
+        clearQBtn.type = "button";
+        clearQBtn.className = "action-btn";
+        clearQBtn.style.background = "rgba(239, 68, 68, 0.12)";
+        clearQBtn.style.color = "#ef4444";
+        clearQBtn.style.border = "1px solid rgba(239, 68, 68, 0.25)";
+        clearQBtn.innerHTML = `
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+          <span>Clear Queue</span>
+        `;
+        clearQBtn.onclick = function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          state.queue = [];
+          renderQueue();
+          renderTracks();
+          broadcastRoomUpdate();
+          showToast("Queue cleared");
+        };
+        viewActionsContainer.appendChild(clearQBtn);
       }
     } else {
       viewActionsContainer.style.display = "none";
@@ -2429,14 +2463,12 @@
     });
   }
 
-  seekTrack.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+  function handleSeekToClientX(clientX) {
     var dur = getPlayerDuration();
     if (!dur || isNaN(dur) || !isFinite(dur)) return;
 
     var rect = seekTrack.getBoundingClientRect();
-    var clickX = e.clientX - rect.left;
+    var clickX = clientX - rect.left;
     var pct = Math.max(0, Math.min(1, clickX / rect.width));
     var targetTime = pct * dur;
 
@@ -2450,7 +2482,26 @@
       updatePlayerUI();
     }
     broadcastRoomUpdate();
+  }
+
+  seekTrack.addEventListener("click", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    handleSeekToClientX(e.clientX);
   });
+
+  seekTrack.addEventListener("touchstart", function (e) {
+    if (e.touches && e.touches[0]) {
+      e.stopPropagation();
+      handleSeekToClientX(e.touches[0].clientX);
+    }
+  }, { passive: true });
+
+  seekTrack.addEventListener("touchmove", function (e) {
+    if (e.touches && e.touches[0]) {
+      handleSeekToClientX(e.touches[0].clientX);
+    }
+  }, { passive: true });
 
   // ---------- Volume Slider ----------
   function initVolumeControl() {
@@ -3489,6 +3540,8 @@
     if (mobileNavBackdrop) mobileNavBackdrop.classList.toggle("active", isOpen);
   }
 
+  var navCloseBtn = document.getElementById("navCloseBtn");
+
   if (mobileMenuBtn) {
     mobileMenuBtn.addEventListener("click", function (e) {
       e.preventDefault();
@@ -3497,16 +3550,30 @@
     });
   }
 
+  if (navCloseBtn) {
+    navCloseBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMobileNav();
+    });
+  }
+
   if (mobileNavBackdrop) {
     mobileNavBackdrop.addEventListener("click", closeMobileNav);
   }
 
-  document.querySelectorAll(".nav-item").forEach(function (item) {
-    item.addEventListener("click", function () {
-      if (window.innerWidth <= 860) {
+  // Auto-close nav drawer on mobile when clicking any navigation link, playlist or action
+  document.addEventListener("click", function (e) {
+    if (window.innerWidth <= 860) {
+      if (
+        e.target.closest(".nav-item") ||
+        e.target.closest(".playlist-row") ||
+        e.target.closest("#newPlaylistBtn") ||
+        e.target.closest(".nav-logout-btn")
+      ) {
         closeMobileNav();
       }
-    });
+    }
   });
 
   // Global Image error fallback so expired hq720 thumbnails cleanly fallback to canonical static hqdefault
@@ -3528,7 +3595,7 @@
       if ("caches" in window) {
         caches.keys().then(function (keys) {
           keys.forEach(function (k) {
-            if (k !== "daddy-music-shell-v16") {
+            if (k !== "daddy-music-shell-v17") {
               caches.delete(k).catch(function () {});
             }
           });

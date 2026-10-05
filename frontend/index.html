@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body class="gate-active">
 
@@ -74,7 +74,10 @@
 
 <div class="app">
   <nav class="nav" aria-label="Library navigation">
-    <div class="brand">Daddy's Music <span>by Phantom</span></div>
+    <div class="nav-brand-row">
+      <div class="brand">Daddy's Music <span>by Phantom</span></div>
+      <button type="button" class="nav-close-btn" id="navCloseBtn" aria-label="Close navigation" title="Close menu">✕</button>
+    </div>
 
     <div class="nav-group">
       <div class="nav-label">Library</div>
@@ -85,6 +88,10 @@
       <div class="nav-item" data-view="favorites">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 20s-7-4.4-9.5-9A5.5 5.5 0 0112 5.5 5.5 5.5 0 0121.5 11c-2.5 4.6-9.5 9-9.5 9z"/></svg>
         Favorites
+      </div>
+      <div class="nav-item mobile-only-item" data-view="queue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        Up Next (Queue)
       </div>
     </div>
 
@@ -111,6 +118,19 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
         New playlist
       </div>
+    </div>
+
+    <div class="nav-user-box" id="navUserBox" style="display:none;">
+      <div class="nav-user-info">
+        <div class="nav-user-avatar" id="navUserAvatar">P</div>
+        <div class="nav-user-meta">
+          <div class="nav-username" id="navUsername">User</div>
+          <div class="nav-user-sub">Phantom Member</div>
+        </div>
+      </div>
+      <button type="button" class="nav-logout-btn" id="navLogoutBtn" title="Sign out" aria-label="Sign out">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      </button>
     </div>
   </nav>
   <div id="mobileNavBackdrop" class="mobile-nav-backdrop"></div>
@@ -513,7 +533,7 @@
 
 <script src="https://www.youtube.com/iframe_api"></script>
 <script src="socket.io.min.js"></script>
-<script src="auth-gate.js?v=16"></script>
-<script src="app.js?v=16"></script>
+<script src="auth-gate.js?v=17"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>
