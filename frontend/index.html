@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=14">
+  <link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body class="gate-active">
 
@@ -495,8 +495,7 @@
     </div>
 
     <div class="video-stage" id="videoStage">
-      <iframe id="ytVideoIframe" class="yt-video-iframe" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
-      <video id="musicVideoEl" class="music-video-el hidden" crossorigin="anonymous" muted playsinline preload="none"></video>
+      <div id="ytPlayerContainer" class="yt-player-container"></div>
       <div id="videoLoadingOverlay" class="video-loading-overlay hidden">
         <div class="video-spinner"></div>
         <span>Loading YouTube Music Video…</span>
@@ -508,8 +507,9 @@
 <audio id="audioEngine" crossorigin="anonymous" preload="auto"></audio>
 <audio id="audioEngineB" crossorigin="anonymous" preload="auto"></audio>
 
+<script src="https://www.youtube.com/iframe_api"></script>
 <script src="socket.io.min.js"></script>
-<script src="auth-gate.js?v=15"></script>
-<script src="app.js?v=15"></script>
+<script src="auth-gate.js?v=16"></script>
+<script src="app.js?v=16"></script>
 </body>
 </html>

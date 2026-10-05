@@ -401,165 +401,95 @@ def search_youtube_fallback(query):
 
     return tracks
 
+def search_youtube_innertube(query, limit=20):
+    tracks = []
+    seen = set()
+
+    # Search YouTube directly via lightweight InnerTube JSON API
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Content-Type': 'application/json',
+    }
+    body = {
+        'context': {
+            'client': {
+                'clientName': 'WEB',
+                'clientVersion': '2.20250312.04.00',
+                'hl': 'en',
+                'gl': 'US'
+            }
+        },
+        'query': query
+    }
+    try:
+        resp = HTTP_SESSION.post(
+            'https://www.youtube.com/youtubei/v1/search?prettyPrint=false',
+            json=body,
+            headers=headers,
+            timeout=5
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            sections = data.get('contents', {}).get('twoColumnSearchResultsRenderer', {}).get('primaryContents', {}).get('sectionListRenderer', {}).get('contents', [])
+            for sec in sections:
+                items = sec.get('itemSectionRenderer', {}).get('contents', [])
+                for it in items:
+                    vr = it.get('videoRenderer')
+                    if not vr:
+                        continue
+                    vid = vr.get('videoId')
+                    if not vid or vid in seen or not re.match(r'^[A-Za-z0-9_-]{11}$', vid):
+                        continue
+                    seen.add(vid)
+
+                    title = ''.join([t.get('text', '') for t in vr.get('title', {}).get('runs', [])])
+                    channel = ''.join([t.get('text', '') for t in vr.get('ownerText', {}).get('runs', [])])
+                    dur_text = vr.get('lengthText', {}).get('simpleText') or ''
+                    dur_sec = 0
+                    if dur_text:
+                        parts = [int(p) for p in dur_text.split(':') if p.isdigit()]
+                        if len(parts) == 2:
+                            dur_sec = parts[0] * 60 + parts[1]
+                        elif len(parts) == 3:
+                            dur_sec = parts[0] * 3600 + parts[1] * 60 + parts[2]
+
+                    badges = [b.get('metadataBadgeRenderer', {}).get('style', '') or b.get('metadataBadgeRenderer', {}).get('label', '') for b in vr.get('badges', [])]
+                    if 'LIVE' in str(badges) or 'BADGE_STYLE_TYPE_LIVE_NOW' in str(badges):
+                        continue
+
+                    thumbs = vr.get('thumbnail', {}).get('thumbnails', [])
+                    thumb = thumbs[-1].get('url') if thumbs else f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg'
+
+                    tracks.append({
+                        'id': vid,
+                        'title': title,
+                        'artist': channel,
+                        'album': 'YouTube',
+                        'thumbnail': thumb,
+                        'dur': dur_sec,
+                        'duration': dur_sec,
+                        'queryTarget': f"{channel} - {title}"
+                    })
+                    if len(tracks) >= limit:
+                        break
+    except Exception as e:
+        print("YouTube search error:", e)
+
+    # Fallback to search_youtube_fallback if InnerTube returned no tracks
+    if not tracks:
+        tracks = search_youtube_fallback(query)[:limit]
+
+    return tracks
+
+
 @app.route('/api/search', methods=['GET'])
 def search_tracks():
     query = request.args.get('q', '').strip()
     if not query:
         return jsonify([])
 
-    raw_lower = query.lower()
-    BAD_PATTERNS = [
-        'karaoke', 'tribute', 'originally performed', 'instrumental',
-        'backing track', 'workout mix', 'fitness', 'ringtone', '8d audio',
-        'slowed', 'reverb', 'sped up', 'speed up', 'lofi', 'lo-fi',
-        'chipmunk', 'drill', 'bass boosted', 'nightcore'
-    ]
-    if 'cover' not in raw_lower:
-        BAD_PATTERNS.append('cover')
-    if 'remix' not in raw_lower:
-        BAD_PATTERNS.append('remix')
-    if 'acoustic' not in raw_lower:
-        BAD_PATTERNS.append('acoustic')
-
-    tracks = []
-    seen = set()
-
-    # 1. Primary: Apple iTunes Global Music Catalog (natural popularity ranking)
-    try:
-        res = HTTP_SESSION.get(
-            "https://itunes.apple.com/search",
-            params={
-                "term": query,
-                "media": "music",
-                "entity": "song",
-                "limit": 15
-            },
-            timeout=3
-        )
-        if res.status_code == 200:
-            data = res.json()
-            results = data.get('results', [])
-            for idx, item in enumerate(results):
-                track_title = item.get('trackName', '')
-                artist_name = item.get('artistName', '')
-                full = f"{track_title} {artist_name}".lower()
-                if any(re.search(r'\b' + re.escape(bp) + r'\b', full) for bp in BAD_PATTERNS):
-                    continue
-
-                norm_key = (
-                    re.sub(r'\(.*?\)|\[.*?\]|\W+', '', track_title.lower()),
-                    re.sub(r'\W+', '', artist_name.lower()[:8])
-                )
-                if norm_key in seen:
-                    continue
-                seen.add(norm_key)
-
-                art = item.get('artworkUrl100', '')
-                high_res_art = art.replace('100x100bb', '500x500bb') if art else ''
-                dur = int((item.get('trackTimeMillis') or 0) / 1000)
-
-                # Apple popularity bonus + exact title bonus
-                score = max(0, 160 - idx * 10)
-                t_clean = re.sub(r'\(.*?\)|\[.*?\]', '', track_title).strip().lower()
-                if t_clean == raw_lower:
-                    score += 100
-                elif raw_lower in t_clean:
-                    score += 40
-
-                tracks.append({
-                    '_score': score,
-                    'id': str(item.get('trackId')),
-                    'title': track_title,
-                    'artist': artist_name,
-                    'album': item.get('collectionName', 'Single'),
-                    'genre': item.get('primaryGenreName', '') or '',
-                    'thumbnail': high_res_art,
-                    'dur': dur,
-                    'duration': dur,
-                    'queryTarget': f"{artist_name} - {track_title}"
-                })
-    except Exception as e:
-        print("iTunes search error:", e)
-
-    # 2. JioSaavn (Bollywood, Indian, Punjabi & Global tracks)
-    try:
-        r_s = HTTP_SESSION.get(
-            "https://www.jiosaavn.com/api.php",
-            params={
-                "__call": "search.getResults",
-                "_format": "json",
-                "_marker": "0",
-                "api_version": "4",
-                "ctx": "web6dot0",
-                "n": "10",
-                "p": "1",
-                "q": query
-            },
-            timeout=3
-        )
-        if r_s.status_code == 200:
-            s_results = (r_s.json().get('results') or [])
-            for s_idx, item in enumerate(s_results):
-                title = _html.unescape(item.get('title') or '')
-                sub = _html.unescape(item.get('subtitle') or '')
-                more = item.get('more_info') or {}
-                singers = more.get('singers') or (sub.split(' - ')[0] if ' - ' in sub else sub)
-                artist = singers or 'Unknown Artist'
-                full = f"{title} {artist}".lower()
-                if any(re.search(r'\b' + re.escape(bp) + r'\b', full) for bp in BAD_PATTERNS):
-                    continue
-
-                norm_key = (
-                    re.sub(r'\(.*?\)|\[.*?\]|\W+', '', title.lower()),
-                    re.sub(r'\W+', '', artist.lower()[:8])
-                )
-                if norm_key in seen:
-                    continue
-                seen.add(norm_key)
-
-                dur = int(more.get('duration') or 0)
-                if dur < 45:
-                    continue
-                img = (item.get('image') or '').replace('150x150', '500x500')
-
-                score = max(0, 130 - s_idx * 10)
-                t_clean = re.sub(r'\(.*?\)|\[.*?\]', '', title).strip().lower()
-                if t_clean == raw_lower:
-                    score += 100
-                elif raw_lower in t_clean:
-                    score += 40
-
-                sid = str(item.get('id') or '')
-                tracks.append({
-                    '_score': score,
-                    'id': f"saavn_{sid}" if sid else str(item.get('perma_url', '')),
-                    'title': title,
-                    'artist': artist,
-                    'album': _html.unescape(more.get('album') or 'Single'),
-                    'genre': 'Bollywood' if any(w in full for w in ['singh', 'kumar', 'khan', 'sharma', 't-series', 'zee', 'arijit', 'jawan', 'animal', 'fighter']) else 'Pop',
-                    'thumbnail': img,
-                    'dur': dur,
-                    'duration': dur,
-                    'queryTarget': f"{artist} - {title}"
-                })
-    except Exception as e:
-        print("JioSaavn search error:", e)
-
-    # Sort so authentic original release is always #1
-    tracks.sort(key=lambda x: x.get('_score', 0), reverse=True)
-    for t in tracks:
-        t.pop('_score', None)
-
-    # 3. Safety fallback to YouTube if both return < 2 tracks
-    if len(tracks) < 2:
-        yt_tracks = search_youtube_fallback(query)
-        existing_ids = {t['id'] for t in tracks}
-        for yt_t in yt_tracks:
-            if yt_t['id'] not in existing_ids:
-                tracks.append(yt_t)
-                existing_ids.add(yt_t['id'])
-
-    return jsonify(tracks[:15])
+    tracks = search_youtube_innertube(query, limit=20)
+    return jsonify(tracks)
 
 
 @app.route('/api/recommend', methods=['GET'])
@@ -574,105 +504,17 @@ def recommend_tracks():
     if track_id:
         exclude_ids.add(track_id)
 
-    norm_seed_title = re.sub(r'[^a-z0-9]+', '', title.lower())
     primary_artist = artist.split(',')[0].split('&')[0].split('feat')[0].strip() if artist else ''
+    search_query = f"{primary_artist} songs" if primary_artist else (f"{title} songs" if title else "top hits songs")
 
-    # Step 1: If genre is unknown or generic, look up the seed track on iTunes to get its exact primaryGenreName
-    if not genre or genre.lower() in ('music', 'unknown', 'single'):
-        lookup_term = f"{primary_artist} {title}".strip() or title or primary_artist
-        if lookup_term:
-            try:
-                r_meta = HTTP_SESSION.get(
-                    "https://itunes.apple.com/search",
-                    params={"term": lookup_term, "media": "music", "entity": "song", "limit": 3},
-                    timeout=3
-                )
-                if r_meta.status_code == 200:
-                    for item in r_meta.json().get('results', []):
-                        g_name = (item.get('primaryGenreName') or '').strip()
-                        if g_name:
-                            genre = g_name
-                            if not primary_artist and item.get('artistName'):
-                                primary_artist = item['artistName'].split(',')[0].split('&')[0].strip()
-                            break
-            except Exception:
-                pass
+    candidates = search_youtube_innertube(search_query, limit=20)
+    recommended = [t for t in candidates if t['id'] not in exclude_ids]
+    if not recommended:
+        recommended = candidates
 
-    # Step 2: Build genre-driven search queries so recommendations match the exact genre & vibe
-    search_terms = []
-    if genre and primary_artist:
-        search_terms.append(f"{genre} {primary_artist}")
-    if genre:
-        search_terms.append(f"{genre} hits")
-        search_terms.append(f"top {genre} songs")
-    if primary_artist:
-        search_terms.append(primary_artist)
-
-    if not search_terms:
-        search_terms = ["top hits songs"]
-
-    same_genre_candidates = []
-    other_candidates = []
-    seen_ids = set(exclude_ids)
-    seen_titles = {norm_seed_title} if norm_seed_title else set()
-
-    for term in search_terms[:3]:
-        try:
-            res = HTTP_SESSION.get(
-                "https://itunes.apple.com/search",
-                params={"term": term, "media": "music", "entity": "song", "limit": 20},
-                timeout=3
-            )
-            if res.status_code != 200:
-                continue
-            for item in res.json().get('results', []):
-                tid = str(item.get('trackId') or '')
-                if not tid or tid in seen_ids:
-                    continue
-                t_title = (item.get('trackName') or '').strip()
-                t_artist = (item.get('artistName') or '').strip()
-                if not t_title or not t_artist:
-                    continue
-                norm_t = re.sub(r'[^a-z0-9]+', '', t_title.lower())
-                if norm_t in seen_titles:
-                    continue
-
-                seen_ids.add(tid)
-                seen_titles.add(norm_t)
-
-                art = item.get('artworkUrl100', '')
-                high_res_art = art.replace('100x100bb', '500x500bb') if art else ''
-                item_genre = (item.get('primaryGenreName') or genre or '').strip()
-                dur_sec = int((item.get('trackTimeMillis') or 0) / 1000)
-                if dur_sec > 0 and dur_sec < 45:
-                    continue
-
-                track_obj = {
-                    'id': tid,
-                    'title': t_title,
-                    'artist': t_artist,
-                    'album': item.get('collectionName', 'Single'),
-                    'genre': item_genre,
-                    'thumbnail': high_res_art,
-                    'dur': dur_sec,
-                    'duration': dur_sec,
-                    'queryTarget': f"{t_artist} - {t_title}"
-                }
-
-                if genre and item_genre.lower() == genre.lower():
-                    same_genre_candidates.append(track_obj)
-                else:
-                    other_candidates.append(track_obj)
-        except Exception:
-            pass
-
-        if len(same_genre_candidates) >= 10:
-            break
-
-    combined = same_genre_candidates + other_candidates
     return jsonify({
         'genre': genre or 'Similar Vibe',
-        'tracks': combined[:12]
+        'tracks': recommended[:12]
     })
 
 # ---------- Tier 4+: Ultra-Fast Resolution, Progressive RAM Buffer & LRU Disk Cache ----------
