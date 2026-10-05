@@ -373,11 +373,22 @@ def search_youtube_fallback(query):
                     continue
 
                 dur = entry.get('duration') or 0
-                if dur > 0 and dur < 45:
+                if dur > 0 and (dur < 45 or dur > 660):
                     continue
 
                 title = entry.get('title', 'Unknown Title')
                 artist = entry.get('uploader') or entry.get('channel') or 'Unknown Artist'
+
+                t_lower = title.lower()
+                NON_SONG_WORDS = [
+                    'reaction', 'reacts to', 'react to', 'review', 'interview', 'podcast',
+                    'behind the scenes', 'making of', 'vlog', 'trailer', 'teaser',
+                    'unboxing', 'full movie', 'gameplay', 'walkthrough', 'tutorial',
+                    'parody', 'funny moments', 'roast', 'whatsapp status', 'status video',
+                    'episode', 'ep ', 'news', 'comedy', 'scene', 'shorts', 'tiktok', 'live'
+                ]
+                if any(nw in t_lower for nw in NON_SONG_WORDS):
+                    continue
 
                 thumbnail = f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg"
 
@@ -405,103 +416,219 @@ def search_youtube_innertube(query, limit=20):
     seen = set()
 
     q_clean = query.strip()
+    if not q_clean:
+        return []
     q_lower = q_clean.lower()
-    # Enhance queries lacking music keywords so YouTube targets songs rather than compilations or talk
-    search_q = q_clean
-    if not any(w in q_lower for w in ['song', 'songs', 'music', 'track', 'audio', 'video', 'ost', 'remix', 'soundtrack']):
-        search_q = f"{q_clean} song"
 
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Content-Type': 'application/json',
-    }
-    body = {
-        'context': {
-            'client': {
-                'clientName': 'WEB',
-                'clientVersion': '2.20250312.04.00',
-                'hl': 'en',
-                'gl': 'US'
-            }
-        },
-        'query': search_q
-    }
-
-    NON_SONG_WORDS = [
-        'reaction', 'reacts to', 'react to', 'review', 'interview', 'podcast',
-        'behind the scenes', 'making of', 'vlog', 'trailer', 'teaser',
-        'unboxing', 'full movie', 'gameplay', 'walkthrough', 'tutorial',
-        'parody', 'funny moments', 'roast', 'whatsapp status', 'status video'
-    ]
-
+    # -------------------------------------------------------------
+    # Method 1 (Primary): YouTube Music (WEB_REMIX) with Songs Filter
+    # Exclusively queries the music catalog — guarantees 100% pure songs!
+    # -------------------------------------------------------------
     try:
+        ytm_headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://music.youtube.com/',
+            'Content-Type': 'application/json'
+        }
+        ytm_body = {
+            'context': {
+                'client': {
+                    'clientName': 'WEB_REMIX',
+                    'clientVersion': '1.20250312.01.00',
+                    'hl': 'en',
+                    'gl': 'US'
+                }
+            },
+            'query': q_clean,
+            'params': 'EgWKAQIIAWoKEAkQChAFEBEQEw%3D%3D'  # Strict "Songs" filter in YouTube Music
+        }
         resp = HTTP_SESSION.post(
-            'https://www.youtube.com/youtubei/v1/search?prettyPrint=false',
-            json=body,
-            headers=headers,
+            'https://music.youtube.com/youtubei/v1/search',
+            json=ytm_body,
+            headers=ytm_headers,
             timeout=5
         )
         if resp.status_code == 200:
             data = resp.json()
-            sections = data.get('contents', {}).get('twoColumnSearchResultsRenderer', {}).get('primaryContents', {}).get('sectionListRenderer', {}).get('contents', [])
-            for sec in sections:
-                items = sec.get('itemSectionRenderer', {}).get('contents', [])
-                for it in items:
-                    vr = it.get('videoRenderer')
-                    if not vr:
-                        continue
-                    vid = vr.get('videoId')
-                    if not vid or vid in seen or not re.match(r'^[A-Za-z0-9_-]{11}$', vid):
-                        continue
+            raw_items = []
+            def extract_ytm_items(obj):
+                if isinstance(obj, dict):
+                    for k, v in obj.items():
+                        if k == 'musicResponsiveListItemRenderer':
+                            raw_items.append(v)
+                        else:
+                            extract_ytm_items(v)
+                elif isinstance(obj, list):
+                    for it in obj:
+                        extract_ytm_items(it)
+            extract_ytm_items(data)
 
-                    title = ''.join([t.get('text', '') for t in vr.get('title', {}).get('runs', [])])
-                    channel = ''.join([t.get('text', '') for t in vr.get('ownerText', {}).get('runs', [])])
-                    dur_text = vr.get('lengthText', {}).get('simpleText') or ''
-                    dur_sec = 0
-                    if dur_text:
-                        parts = [int(p) for p in dur_text.split(':') if p.isdigit()]
-                        if len(parts) == 2:
-                            dur_sec = parts[0] * 60 + parts[1]
-                        elif len(parts) == 3:
-                            dur_sec = parts[0] * 3600 + parts[1] * 60 + parts[2]
+            for it in raw_items:
+                cols = it.get('flexColumns', [])
+                if not cols:
+                    continue
+                title = ''
+                artist = ''
+                album = 'Single'
+                dur_sec = 0
 
-                    # 1. Filter out live streams
-                    badges = [b.get('metadataBadgeRenderer', {}).get('style', '') or b.get('metadataBadgeRenderer', {}).get('label', '') for b in vr.get('badges', [])]
-                    if 'LIVE' in str(badges) or 'BADGE_STYLE_TYPE_LIVE_NOW' in str(badges):
-                        continue
+                # Column 0: Song Title
+                runs0 = cols[0].get('musicResponsiveListItemFlexColumnRenderer', {}).get('text', {}).get('runs', [])
+                title = ''.join(r.get('text', '') for r in runs0).strip()
 
-                    # 2. Filter out non-song durations (under 45s shorts/memes or over 11 mins compilations/podcasts)
-                    if dur_sec > 0 and (dur_sec < 45 or dur_sec > 660):
-                        if not any(w in q_lower for w in ['album', 'mix', 'jukebox', 'compilation', 'playlist']):
-                            continue
+                # Column 1: Artist, Album, Duration
+                if len(cols) > 1:
+                    runs1 = cols[1].get('musicResponsiveListItemFlexColumnRenderer', {}).get('text', {}).get('runs', [])
+                    meta_parts = []
+                    cur = []
+                    for r in runs1:
+                        txt = r.get('text', '')
+                        if txt.strip() in ['•', '·', '—']:
+                            part = ''.join(cur).strip()
+                            if part:
+                                meta_parts.append(part)
+                            cur = []
+                        else:
+                            cur.append(txt)
+                    part = ''.join(cur).strip()
+                    if part:
+                        meta_parts.append(part)
 
-                    # 3. Filter out random non-song videos (reactions, reviews, podcasts, vlogs, trailers)
-                    t_lower = title.lower()
-                    if any(nw in t_lower for nw in NON_SONG_WORDS):
-                        if not any(nw in q_lower for nw in NON_SONG_WORDS):
-                            continue
+                    if meta_parts:
+                        artist = meta_parts[0]
+                    for mp in meta_parts[1:]:
+                        if ':' in mp and all(p.isdigit() for p in mp.split(':')):
+                            p_parts = [int(p) for p in mp.split(':')]
+                            if len(p_parts) == 2:
+                                dur_sec = p_parts[0] * 60 + p_parts[1]
+                            elif len(p_parts) == 3:
+                                dur_sec = p_parts[0] * 3600 + p_parts[1] * 60 + p_parts[2]
+                        else:
+                            album = mp
 
+                # VideoId from playNavigationEndpoint or watchEndpoint
+                nav = it.get('overlay', {}).get('musicItemThumbnailOverlayRenderer', {}).get('content', {}).get('musicPlayButtonRenderer', {}).get('playNavigationEndpoint', {})
+                vid = nav.get('watchEndpoint', {}).get('videoId')
+                if not vid:
+                    vid = it.get('navigationEndpoint', {}).get('watchEndpoint', {}).get('videoId')
+
+                if vid and vid not in seen and re.match(r'^[A-Za-z0-9_-]{11}$', vid) and title:
                     seen.add(vid)
-
-                    # Always use permanent canonical static thumbnail URL to avoid expiring hq720 404s
-                    thumb = f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg'
-
                     tracks.append({
                         'id': vid,
                         'title': title,
-                        'artist': channel,
-                        'album': 'YouTube',
-                        'thumbnail': thumb,
+                        'artist': artist or 'Unknown Artist',
+                        'album': album or 'YouTube Music',
+                        'thumbnail': f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg',
                         'dur': dur_sec,
                         'duration': dur_sec,
-                        'queryTarget': f"{channel} - {title}"
+                        'queryTarget': f'{artist} - {title}' if artist else title
                     })
                     if len(tracks) >= limit:
                         break
     except Exception as e:
-        print("YouTube search error:", e)
+        print("YouTube Music search error:", e)
 
-    # Fallback to search_youtube_fallback if InnerTube returned no tracks
+    # -------------------------------------------------------------
+    # Method 2 (Fallback): Standard YouTube with strict song filtering
+    # Only runs if YouTube Music returned fewer than 4 tracks
+    # -------------------------------------------------------------
+    if len(tracks) < 4:
+        search_q = q_clean
+        if not any(w in q_lower for w in ['song', 'songs', 'music', 'track', 'audio', 'video', 'ost', 'remix', 'soundtrack']):
+            search_q = f"{q_clean} song"
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Content-Type': 'application/json',
+        }
+        body = {
+            'context': {
+                'client': {
+                    'clientName': 'WEB',
+                    'clientVersion': '2.20250312.04.00',
+                    'hl': 'en',
+                    'gl': 'US'
+                }
+            },
+            'query': search_q,
+            'params': 'EgIQAQ%3D%3D'  # Type: Video
+        }
+
+        NON_SONG_WORDS = [
+            'reaction', 'reacts to', 'react to', 'review', 'interview', 'podcast',
+            'behind the scenes', 'making of', 'vlog', 'trailer', 'teaser',
+            'unboxing', 'full movie', 'gameplay', 'walkthrough', 'tutorial',
+            'parody', 'funny moments', 'roast', 'whatsapp status', 'status video',
+            'episode', 'ep ', 'news', 'comedy', 'scene', 'shorts', 'tiktok', 'live'
+        ]
+
+        try:
+            resp = HTTP_SESSION.post(
+                'https://www.youtube.com/youtubei/v1/search?prettyPrint=false',
+                json=body,
+                headers=headers,
+                timeout=5
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                sections = data.get('contents', {}).get('twoColumnSearchResultsRenderer', {}).get('primaryContents', {}).get('sectionListRenderer', {}).get('contents', [])
+                for sec in sections:
+                    items = sec.get('itemSectionRenderer', {}).get('contents', [])
+                    for it in items:
+                        vr = it.get('videoRenderer')
+                        if not vr:
+                            continue
+                        vid = vr.get('videoId')
+                        if not vid or vid in seen or not re.match(r'^[A-Za-z0-9_-]{11}$', vid):
+                            continue
+
+                        title = ''.join([t.get('text', '') for t in vr.get('title', {}).get('runs', [])])
+                        channel = ''.join([t.get('text', '') for t in vr.get('ownerText', {}).get('runs', [])])
+                        dur_text = vr.get('lengthText', {}).get('simpleText') or ''
+                        dur_sec = 0
+                        if dur_text:
+                            parts = [int(p) for p in dur_text.split(':') if p.isdigit()]
+                            if len(parts) == 2:
+                                dur_sec = parts[0] * 60 + parts[1]
+                            elif len(parts) == 3:
+                                dur_sec = parts[0] * 3600 + parts[1] * 60 + parts[2]
+
+                        # 1. Filter out live streams
+                        badges = [b.get('metadataBadgeRenderer', {}).get('style', '') or b.get('metadataBadgeRenderer', {}).get('label', '') for b in vr.get('badges', [])]
+                        if 'LIVE' in str(badges) or 'BADGE_STYLE_TYPE_LIVE_NOW' in str(badges):
+                            continue
+
+                        # 2. Filter out non-song durations (under 45s shorts/memes or over 11 mins compilations/podcasts)
+                        if dur_sec > 0 and (dur_sec < 45 or dur_sec > 660):
+                            if not any(w in q_lower for w in ['album', 'mix', 'jukebox', 'compilation', 'playlist']):
+                                continue
+
+                        # 3. Filter out random non-song videos (reactions, reviews, podcasts, vlogs, trailers, scenes)
+                        t_lower = title.lower()
+                        if any(nw in t_lower for nw in NON_SONG_WORDS):
+                            if not any(nw in q_lower for nw in NON_SONG_WORDS):
+                                continue
+
+                        seen.add(vid)
+                        thumb = f'https://i.ytimg.com/vi/{vid}/hqdefault.jpg'
+
+                        tracks.append({
+                            'id': vid,
+                            'title': title,
+                            'artist': channel,
+                            'album': 'YouTube',
+                            'thumbnail': thumb,
+                            'dur': dur_sec,
+                            'duration': dur_sec,
+                            'queryTarget': f"{channel} - {title}"
+                        })
+                        if len(tracks) >= limit:
+                            break
+        except Exception as e:
+            print("YouTube search error:", e)
+
+    # Method 3 (Final fallback): search_youtube_fallback
     if not tracks:
         tracks = search_youtube_fallback(query)[:limit]
 
