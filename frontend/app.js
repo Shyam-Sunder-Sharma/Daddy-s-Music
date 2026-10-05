@@ -101,8 +101,43 @@
     } catch (e) {}
   }
 
+  var NON_SONG_KEYWORDS = [
+    "reaction", "reacts to", "react to", "review", "interview", "podcast",
+    "behind the scenes", "making of", "vlog", "trailer", "teaser",
+    "unboxing", "full movie", "gameplay", "walkthrough", "tutorial",
+    "parody", "funny moments", "roast", "whatsapp status", "status video",
+    "episode", "ep ", "news", "comedy", "scene", "shorts", "tiktok"
+  ];
+
+  function isSongTrack(track) {
+    if (!track || !track.title) return false;
+    var tLower = (track.title || "").toLowerCase();
+    for (var i = 0; i < NON_SONG_KEYWORDS.length; i++) {
+      if (tLower.includes(NON_SONG_KEYWORDS[i])) {
+        return false;
+      }
+    }
+    var dur = track.dur || track.duration || 0;
+    if (dur > 0 && (dur < 40 || dur > 660)) {
+      return false;
+    }
+    return true;
+  }
+
+  // Automatic legacy cache purge to clean out non-song videos from previous versions
+  try {
+    if (!localStorage.getItem("daddy_songs_only_v20")) {
+      localStorage.setItem("daddy_songs_only_v20", "1");
+      localStorage.removeItem("daddy_track_cache");
+      var curHist = loadJSON("daddy_history", []);
+      if (Array.isArray(curHist)) {
+        saveJSON("daddy_history", curHist.filter(isSongTrack));
+      }
+    }
+  } catch (e) {}
+
   function registerTrack(track, skipSave) {
-    if (track && track.id) {
+    if (track && track.id && isSongTrack(track)) {
       if (!track.dur && track.duration) {
         track.dur = track.duration;
       }
@@ -117,10 +152,14 @@
     var cached = loadJSON("daddy_track_cache", {});
     if (cached && typeof cached === "object") {
       Object.keys(cached).forEach(function (k) {
-        registerTrack(cached[k], true);
+        var tr = cached[k];
+        if (isSongTrack(tr)) {
+          registerTrack(tr, true);
+        }
       });
     }
     if (Array.isArray(state.history)) {
+      state.history = state.history.filter(isSongTrack);
       state.history.forEach(function (t) {
         registerTrack(t, true);
       });
@@ -534,31 +573,21 @@
 
     var qKey = state.searchQuery.toLowerCase();
 
-    // Also include fuzzy-matched local tracks immediately while fetching or from cache
-    var localMatches = [];
-    TRACK_MAP.forEach(function (t) {
-      if (fuzzyScoreTrack(t, state.searchQuery) > 0) {
-        localMatches.push(t);
-      }
-    });
-
+    // Use cached search only if all cached results are valid songs
     if (searchCache.has(qKey)) {
-      state.searchResults = searchCache.get(qKey);
-      viewTitle.textContent = 'Results for "' + state.searchQuery + '"';
-      viewHint.textContent = state.searchResults.length + " track(s) found.";
-      renderTracks();
-      return;
+      var cachedTracks = (searchCache.get(qKey) || []).filter(isSongTrack);
+      if (cachedTracks.length > 0) {
+        state.searchResults = cachedTracks;
+        viewTitle.textContent = 'Results for "' + state.searchQuery + '"';
+        viewHint.textContent = state.searchResults.length + " song(s) found.";
+        renderTracks();
+        return;
+      }
     }
 
     viewTitle.textContent = 'Results for "' + state.searchQuery + '"';
-    if (localMatches.length > 0) {
-      state.searchResults = filterAndRankTracksFuzzy(localMatches, state.searchQuery);
-      viewHint.textContent = "Showing instant fuzzy matches while searching online...";
-      renderTracks();
-    } else {
-      viewHint.textContent = "Fetching instantly...";
-      renderSkeleton();
-    }
+    viewHint.textContent = "Searching songs on YouTube Music...";
+    renderSkeleton();
 
     if (activeController) {
       try { activeController.abort(); } catch (e) {}
@@ -574,32 +603,23 @@
       })
       .then((tracks) => {
         if (!Array.isArray(tracks)) tracks = [];
+
+        // Strictly filter to pure songs ONLY — eliminates random videos, podcasts, vlogs, memes
+        tracks = tracks.filter(isSongTrack);
+
         tracks.forEach(function (t) {
           registerTrack(t, true);
         });
         persistTrackMap();
 
-        // Merge online results with high-scoring local fuzzy matches
-        var seen = new Set(tracks.map((t) => String(t.id)));
-        localMatches.forEach(function (lt) {
-          if (!seen.has(String(lt.id))) {
-            tracks.push(lt);
-            seen.add(String(lt.id));
-          }
-        });
-
         searchCache.set(qKey, tracks);
         state.searchResults = tracks;
-        viewHint.textContent = tracks.length + " track(s) found.";
+        viewHint.textContent = tracks.length + " song(s) found.";
         renderTracks();
       })
       .catch((err) => {
         if (err.name === "AbortError") return;
-        if (localMatches.length > 0) {
-          viewHint.textContent = localMatches.length + " offline fuzzy match(es).";
-        } else {
-          viewHint.textContent = "Search error. Ensure server is online.";
-        }
+        viewHint.textContent = "Search error. Ensure server is online.";
       });
   }
 
@@ -3595,7 +3615,7 @@
       if ("caches" in window) {
         caches.keys().then(function (keys) {
           keys.forEach(function (k) {
-            if (k !== "daddy-music-shell-v17") {
+            if (k !== "daddy-music-shell-v20") {
               caches.delete(k).catch(function () {});
             }
           });
