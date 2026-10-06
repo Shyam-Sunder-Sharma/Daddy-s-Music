@@ -424,7 +424,13 @@
     navigator.mediaSession.setActionHandler("play", function () {
       if (!state.currentTrack) return;
       if (ytPlayer && typeof ytPlayer.playVideo === "function") {
-        ytPlayer.playVideo();
+        try {
+          if (typeof ytPlayer.unMute === "function") {
+            ytPlayer.unMute();
+          }
+          ytPlayer.playVideo();
+          startPlayKicker();
+        } catch (e) {}
       } else {
         playTrack(state.currentTrack);
       }
@@ -1524,6 +1530,41 @@
   var isYtReady = false;
   var pendingTrackId = null;
   var pendingPlay = false;
+  var playKickerTimer = null;
+
+  function stopPlayKicker() {
+    if (playKickerTimer) {
+      clearInterval(playKickerTimer);
+      playKickerTimer = null;
+    }
+  }
+
+  function startPlayKicker() {
+    stopPlayKicker();
+    var attempts = 0;
+    playKickerTimer = setInterval(function () {
+      attempts++;
+      if (!state.isPlaying || attempts > 25) {
+        stopPlayKicker();
+        return;
+      }
+      if (ytPlayer && typeof ytPlayer.getPlayerState === "function") {
+        try {
+          var s = ytPlayer.getPlayerState();
+          if (s === 1) { // PLAYING!
+            stopPlayKicker();
+            return;
+          }
+          if (typeof ytPlayer.unMute === "function") {
+            ytPlayer.unMute();
+          }
+          if (typeof ytPlayer.playVideo === "function") {
+            ytPlayer.playVideo();
+          }
+        } catch (e) {}
+      }
+    }, 200);
+  }
 
   function initYtPlayer() {
     if (ytPlayer || !window.YT || !window.YT.Player) return;
@@ -1534,7 +1575,7 @@
       ytPlayer = new YT.Player("ytPlayerContainer", {
         height: "100%",
         width: "100%",
-        host: "https://www.youtube-nocookie.com",
+        host: "https://www.youtube.com",
         playerVars: {
           autoplay: 1,
           controls: 1,
@@ -1551,6 +1592,14 @@
         events: {
           onReady: function () {
             isYtReady = true;
+            try {
+              var iframe = ytPlayer.getIframe ? ytPlayer.getIframe() : document.getElementById("ytPlayerContainer");
+              if (iframe) {
+                iframe.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");
+                iframe.setAttribute("playsinline", "1");
+              }
+            } catch (e) {}
+
             var savedVol = parseFloat(localStorage.getItem("phantom_volume") || "0.8");
             setPlayerVolume(savedVol);
             if (state.playbackRate && state.playbackRate !== 1.0) {
@@ -1566,24 +1615,44 @@
                 startSeconds: 0
               });
               if (shouldPlay) {
-                ytPlayer.playVideo();
+                try {
+                  ytPlayer.unMute();
+                  ytPlayer.playVideo();
+                } catch (e) {}
+                startPlayKicker();
               }
             }
           },
           onStateChange: function (event) {
             // YT.PlayerState: -1 (UNSTARTED), 0 (ENDED), 1 (PLAYING), 2 (PAUSED), 3 (BUFFERING), 5 (CUED)
             if (event.data === 1) { // PLAYING
+              stopPlayKicker();
               state.isPlaying = true;
               if (videoLoadingOverlay) videoLoadingOverlay.classList.add("hidden");
               updatePlayerUI();
               updatePiPWindow();
               broadcastRoomUpdate();
+            } else if (event.data === 5) { // CUED (Crucial for mobile initial playback!)
+              if (state.isPlaying && ytPlayer && typeof ytPlayer.playVideo === "function") {
+                try {
+                  ytPlayer.unMute();
+                  ytPlayer.playVideo();
+                } catch (e) {}
+              }
+            } else if (event.data === -1) { // UNSTARTED
+              if (state.isPlaying && ytPlayer && typeof ytPlayer.playVideo === "function") {
+                try {
+                  ytPlayer.unMute();
+                  ytPlayer.playVideo();
+                } catch (e) {}
+              }
             } else if (event.data === 2) { // PAUSED
               state.isPlaying = false;
               updatePlayerUI();
               updatePiPWindow();
               broadcastRoomUpdate();
             } else if (event.data === 0) { // ENDED
+              stopPlayKicker();
               if (state.sleepTimer.mode === "eot") {
                 clearSleepTimer();
                 state.isPlaying = false;
@@ -1812,11 +1881,15 @@
     var vid = String(track.id);
     if (ytPlayer && isYtReady && typeof ytPlayer.loadVideoById === "function") {
       try {
+        if (typeof ytPlayer.unMute === "function") {
+          ytPlayer.unMute();
+        }
         ytPlayer.loadVideoById({
           videoId: vid,
           startSeconds: 0
         });
         ytPlayer.playVideo();
+        startPlayKicker();
         if (state.playbackRate && state.playbackRate !== 1.0) {
           applySpeedToPlayer(state.playbackRate);
         }
@@ -2334,10 +2407,15 @@
     try {
       var pState = ytPlayer.getPlayerState();
       if (pState === 1) { // PLAYING
+        stopPlayKicker();
         ytPlayer.pauseVideo();
         state.isPlaying = false;
       } else {
+        if (typeof ytPlayer.unMute === "function") {
+          ytPlayer.unMute();
+        }
         ytPlayer.playVideo();
+        startPlayKicker();
         state.isPlaying = true;
       }
       updatePlayerUI();
@@ -3609,13 +3687,28 @@
     }
   }, true);
 
+  // ---------- Mobile Touch Audio Primer ----------
+  var hasPrimedMobileAudio = false;
+  function primeMobileAudio() {
+    if (hasPrimedMobileAudio) return;
+    hasPrimedMobileAudio = true;
+    if (ytPlayer && typeof ytPlayer.unMute === "function") {
+      try {
+        ytPlayer.unMute();
+      } catch (e) {}
+    }
+  }
+  window.addEventListener("pointerdown", primeMobileAudio, { passive: true, once: true });
+  window.addEventListener("touchend", primeMobileAudio, { passive: true, once: true });
+  window.addEventListener("click", primeMobileAudio, { passive: true, once: true });
+
   // ---------- PWA Service Worker Registration ----------
   if ("serviceWorker" in navigator && (window.location.protocol === "http:" || window.location.protocol === "https:")) {
     window.addEventListener("load", function () {
       if ("caches" in window) {
         caches.keys().then(function (keys) {
           keys.forEach(function (k) {
-            if (k !== "daddy-music-shell-v21") {
+            if (k !== "daddy-music-shell-v22") {
               caches.delete(k).catch(function () {});
             }
           });
