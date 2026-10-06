@@ -3615,7 +3615,7 @@
       if ("caches" in window) {
         caches.keys().then(function (keys) {
           keys.forEach(function (k) {
-            if (k !== "daddy-music-shell-v20") {
+            if (k !== "daddy-music-shell-v21") {
               caches.delete(k).catch(function () {});
             }
           });

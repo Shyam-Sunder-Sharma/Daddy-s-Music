@@ -133,21 +133,6 @@
       var container = document.getElementById("authNavbarContainer");
       if (container) {
         container.innerHTML = "";
-        var chip = document.createElement("div");
-        chip.className = "user-chip";
-        chip.innerHTML = '<span>Signed in as <strong>' + escapeHtml(user.username) + "</strong></span>";
-        
-        var logoutBtn = document.createElement("button");
-        logoutBtn.className = "btn-link-danger";
-        logoutBtn.type = "button";
-        logoutBtn.textContent = "Logout";
-        logoutBtn.addEventListener("click", function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          logout();
-        });
-        chip.appendChild(logoutBtn);
-        container.appendChild(chip);
       }
 
       var navUserBox = document.getElementById("navUserBox");
