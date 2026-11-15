@@ -2352,8 +2352,8 @@ body.gate-active .app {
   .app {
     display: flex !important;
     flex-direction: column !important;
-    height: 100dvh !important;
     height: 100vh !important;
+    height: 100dvh !important;
     width: 100% !important;
     max-width: 100vw !important;
     overflow: hidden !important;
@@ -2411,7 +2411,7 @@ body.gate-active .app {
     box-shadow: 16px 0 40px rgba(0, 0, 0, 0.85);
     transform: translateX(-100%);
     transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-    padding: 20px 14px !important;
+    padding: max(20px, env(safe-area-inset-top)) 14px max(20px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)) !important;
   }
 
   .nav.mobile-open {
@@ -2447,9 +2447,10 @@ body.gate-active .app {
     min-height: 0 !important;
     width: 100% !important;
     max-width: 100vw !important;
-    padding: 12px 14px 16px !important;
+    padding: max(12px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 16px max(14px, env(safe-area-inset-left)) !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
     display: flex !important;
     flex-direction: column !important;
   }
@@ -2612,8 +2613,7 @@ body.gate-active .app {
     width: 100% !important;
     height: auto !important;
     min-height: 62px !important;
-    padding: 6px 10px !important;
-    padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
+    padding: 6px max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)) !important;
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
@@ -2771,6 +2771,19 @@ body.gate-active .app {
     justify-content: center !important;
   }
 
+  .video-modal-backdrop.hidden {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    position: fixed !important;
+    inset: auto !important;
+    bottom: -9999px !important;
+    left: -9999px !important;
+  }
+
   .video-modal-backdrop.docked {
     inset: auto 10px calc(70px + env(safe-area-inset-bottom)) auto !important;
     padding: 0 !important;
@@ -2856,5 +2869,87 @@ body.gate-active .app {
   .auth-brand {
     font-size: 1.35rem !important;
     margin-bottom: 18px !important;
+  }
+}
+
+/* Specific optimizations for compact phones (iPhone SE, Galaxy Z Fold cover, small Androids) */
+@media (max-width: 375px) {
+  .player {
+    padding: 5px max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)) !important;
+    gap: 4px !important;
+  }
+
+  .p-now .cover {
+    width: 38px !important;
+    height: 38px !important;
+  }
+
+  .p-now .t-title {
+    font-size: 0.78rem !important;
+  }
+
+  .p-now .t-artist {
+    font-size: 0.68rem !important;
+  }
+
+  .play-btn {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+  }
+
+  #prevBtn,
+  #nextBtn {
+    width: 26px !important;
+    height: 26px !important;
+  }
+
+  #videoToggleBtn,
+  #lyricsBtn {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .section-title {
+    font-size: 1.15rem !important;
+  }
+}
+
+@media (max-width: 330px) {
+  .player {
+    padding: 4px max(4px, env(safe-area-inset-right)) max(5px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left)) !important;
+    gap: 3px !important;
+  }
+
+  .p-now .cover {
+    width: 32px !important;
+    height: 32px !important;
+  }
+
+  .p-now .t-title {
+    font-size: 0.72rem !important;
+    max-width: 85px !important;
+  }
+
+  .p-now .t-artist {
+    font-size: 0.64rem !important;
+    max-width: 85px !important;
+  }
+
+  #prevBtn,
+  #nextBtn {
+    display: none !important;
+  }
+
+  .play-btn {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+  }
+
+  #videoToggleBtn,
+  #lyricsBtn {
+    width: 26px !important;
+    height: 26px !important;
   }
 }
