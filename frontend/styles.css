@@ -3572,6 +3572,75 @@ body.gate-active .console-wrapper {
     box-sizing: border-box !important;
   }
 
+  /* 0. Mobile GPU & Compositing Optimizations (60fps Glass & Zero Blur Overdraw) */
+  .console-top-pill,
+  .top-command-bar,
+  .bento-card,
+  .media-deck-card,
+  .stream-panel-card,
+  .search-floating-dropdown,
+  .eq-modal,
+  .lyrics-modal,
+  .modal-box,
+  .cmd-palette-box,
+  .listen-along-box {
+    backdrop-filter: blur(10px) saturate(135%) !important;
+    -webkit-backdrop-filter: blur(10px) saturate(135%) !important;
+  }
+
+  .nav-user-box,
+  .tactile-pill-btn,
+  .spotlight-search-wrap input,
+  .telemetry-badge,
+  .deck-mode-toggle-wrap,
+  .mode-tab,
+  .mode-tab.active,
+  .inline-lyrics-ticker,
+  .deck-ctrl-btn,
+  .transport-hero-play,
+  .speed-pill,
+  .deck-vol-wrap .vol-icon,
+  .stream-tabs-bar,
+  .stream-tab,
+  .filter-pill,
+  .filter-pill.active,
+  .action-btn,
+  .track-row,
+  .track-row.playing,
+  .track-row.active,
+  .track-row .icon-btn,
+  .track-fav-btn,
+  .track-more-btn,
+  .track-delete-btn,
+  .track-row .remove-track,
+  .video-loading-overlay,
+  .modal-overlay,
+  .brand-hover-tooltip {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .nav-user-box,
+  .tactile-pill-btn,
+  .filter-pill,
+  .action-btn,
+  .inline-lyrics-ticker {
+    background: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .filter-pill.active {
+    background: rgba(255, 255, 255, 0.18) !important;
+    border-color: rgba(255, 255, 255, 0.32) !important;
+  }
+
+  .modal-overlay {
+    background: rgba(4, 5, 8, 0.88) !important;
+  }
+
+  .brand-hover-tooltip {
+    background: rgba(12, 15, 22, 0.96) !important;
+  }
+
   /* A. Compact Adaptive Top Header */
   .console-top-pill,
   .top-command-bar {
@@ -3803,16 +3872,38 @@ body.gate-active .console-wrapper {
   .turntable-platter {
     width: clamp(165px, 46vw, 220px) !important;
     height: clamp(165px, 46vw, 220px) !important;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.78) !important;
   }
 
   .vinyl-record {
     width: clamp(145px, 40vw, 190px) !important;
     height: clamp(145px, 40vw, 190px) !important;
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    box-shadow: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    transition: none !important;
+  }
+
+  .vinyl-record.spinning {
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+
+  .vinyl-sheen {
+    mix-blend-mode: normal !important;
   }
 
   .vinyl-label {
     width: clamp(62px, 17vw, 82px) !important;
     height: clamp(62px, 17vw, 82px) !important;
+    box-shadow: none !important;
+  }
+
+  .vinyl-spindle-hole {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25) !important;
   }
 
   .turntable-halo-canvas {
@@ -3900,6 +3991,7 @@ body.gate-active .console-wrapper {
     width: 100% !important;
     margin-top: 10px !important;
     margin-bottom: 2px !important;
+    contain: layout style !important;
   }
 
   .full-width-seek {
@@ -4069,6 +4161,7 @@ body.gate-active .console-wrapper {
     min-height: 0 !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch !important;
+    contain: content !important;
   }
 
   /* Touch-Optimized Track Rows */
@@ -4077,6 +4170,18 @@ body.gate-active .console-wrapper {
     height: 52px !important;
     padding: 5px 8px !important;
     gap: 8px !important;
+    contain: layout style !important;
+  }
+
+  .track-row:hover {
+    transform: none !important;
+  }
+
+  .track-row.playing,
+  .track-row.active {
+    background: rgba(255, 255, 255, 0.11) !important;
+    border: 1px solid rgba(255, 255, 255, 0.22) !important;
+    box-shadow: none !important;
   }
 
   .t-main {

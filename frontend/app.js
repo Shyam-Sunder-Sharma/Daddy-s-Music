@@ -2247,10 +2247,17 @@
     return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
   }
 
+  var cachedDynAccent = "#22c55e";
+  var cachedDynAccentLight = "#86efac";
+
   function setDynamicColorTokens(r, g, b) {
     var rLight = Math.min(255, Math.round(r * 0.45 + 255 * 0.55));
     var gLight = Math.min(255, Math.round(g * 0.45 + 255 * 0.55));
     var bLight = Math.min(255, Math.round(b * 0.45 + 255 * 0.55));
+
+    cachedDynAccent = `rgb(${r}, ${g}, ${b})`;
+    cachedDynAccentLight = `rgb(${rLight}, ${gLight}, ${bLight})`;
+    vizDirty = true;
 
     var doc = document.documentElement;
     // Set dynamic custom properties for brand, cards, scrubber & reactive elements
@@ -3103,6 +3110,11 @@
   }
 
   // ---------- Playback Progress & Sync Ticker ----------
+  var lastCurTimeStr = "";
+  var lastDurTimeStr = "";
+  var lastSeekPctStr = "";
+  var mediaSessionTickCounter = 0;
+
   setInterval(function () {
     if (!state.isPlaying || !state.currentTrack) return;
 
@@ -3110,12 +3122,27 @@
     var dur = getPlayerDuration();
     if (!dur || dur <= 0) return;
 
-    curTime.textContent = fmtTime(cur);
-    durTime.textContent = fmtTime(dur);
-    seekFill.style.width = Math.min(100, (cur / dur) * 100) + "%";
+    if (!document.hidden) {
+      var curStr = fmtTime(cur);
+      var durStr = fmtTime(dur);
+      var pctStr = Math.min(100, (cur / dur) * 100).toFixed(2) + "%";
 
-    syncActiveLyricLine(cur);
-    updatePiPProgress(cur, dur);
+      if (curStr !== lastCurTimeStr) {
+        lastCurTimeStr = curStr;
+        curTime.textContent = curStr;
+      }
+      if (durStr !== lastDurTimeStr) {
+        lastDurTimeStr = durStr;
+        durTime.textContent = durStr;
+      }
+      if (pctStr !== lastSeekPctStr) {
+        lastSeekPctStr = pctStr;
+        seekFill.style.width = pctStr;
+      }
+
+      syncActiveLyricLine(cur);
+      updatePiPProgress(cur, dur);
+    }
 
     // Strict single-source mute and sub-0.15s player time-sync
     applySingleSourceAudioRule();
@@ -3826,15 +3853,19 @@
     return score;
   }
 
+  var lastLyricIndex = -2;
+  var cachedInlineTickerEl = null;
+
   async function loadLyrics(rawTitle, rawArtist, durationSec) {
     if (!lyricsContainer) return;
 
     currentParsedLyrics = [];
+    lastLyricIndex = -2;
     if (lyricsTitle) lyricsTitle.innerText = rawTitle;
     if (lyricsArtist) lyricsArtist.innerText = rawArtist;
     if (offsetDisplay) offsetDisplay.innerText = `${lyricOffset > 0 ? "+" : ""}${lyricOffset.toFixed(1)}s`;
 
-    var ticker = document.getElementById("inlineLyricsTicker");
+    var ticker = cachedInlineTickerEl || (cachedInlineTickerEl = document.getElementById("inlineLyricsTicker"));
     if (ticker) {
       ticker.textContent = "♪ Searching verified lyrics...";
     }
@@ -3916,6 +3947,7 @@
 
   function parseAndRenderLyrics(lrcText) {
     currentParsedLyrics = [];
+    lastLyricIndex = -2;
     var lines = lrcText.split("\n");
     var timeRegex = /\[(\d{2}):(\d{2})(?:\.(\d{2,3}))?\]/;
 
@@ -3959,7 +3991,6 @@
   }
 
   function syncActiveLyricLine(cur) {
-    var ticker = document.getElementById("inlineLyricsTicker");
     if (currentParsedLyrics.length === 0) {
       return;
     }
@@ -3975,10 +4006,16 @@
       }
     }
 
+    if (activeIdx === lastLyricIndex) {
+      return;
+    }
+    lastLyricIndex = activeIdx;
+
     if (activeIdx !== -1 && currentParsedLyrics[activeIdx]) {
+      var ticker = cachedInlineTickerEl || (cachedInlineTickerEl = document.getElementById("inlineLyricsTicker"));
       if (ticker) {
         var lineText = currentParsedLyrics[activeIdx].text;
-        if (lineText && ticker.textContent !== "♪ " + lineText) {
+        if (lineText) {
           ticker.textContent = "♪ " + lineText;
         }
       }
@@ -4179,24 +4216,61 @@
     });
   }
 
-  // ---------- Canvas Real-Time Audio Visualizer ----------
+  // ---------- Canvas Real-Time Audio Visualizer (GPU & Mobile 30fps Optimized) ----------
   var playerCanvas = document.getElementById("playerVisualizer");
   var lyricsCanvas = document.getElementById("lyricsVisualizer");
+  var turntableHaloCanvas = document.getElementById("turntableHaloCanvas");
   var VIZ_MODES = ["bars", "retro", "wave"];
+  var vizDirty = true;
+
+  function isMobilePerfMode() {
+    return window.innerWidth <= 900 || (("ontouchstart" in window || navigator.maxTouchPoints > 0) && window.innerWidth <= 1024);
+  }
+
+  var isUserScrollingTracklist = false;
+  var scrollPauseTimer = null;
+  function pauseVizDuringScroll() {
+    if (!isMobilePerfMode()) return;
+    isUserScrollingTracklist = true;
+    if (scrollPauseTimer) clearTimeout(scrollPauseTimer);
+    scrollPauseTimer = setTimeout(function () {
+      isUserScrollingTracklist = false;
+    }, 180);
+  }
+
+  ["trackContainer", "queueContainer", "playlistList"].forEach(function (listId) {
+    var listEl = document.getElementById(listId);
+    if (listEl) {
+      listEl.addEventListener("scroll", pauseVizDuringScroll, { passive: true });
+      listEl.addEventListener("touchmove", pauseVizDuringScroll, { passive: true });
+    }
+  });
+  window.addEventListener("scroll", pauseVizDuringScroll, { passive: true });
 
   function resizeBgVisualizer() {
-    if (!playerCanvas) return;
-    var dpr = window.devicePixelRatio || 1;
-    var w = window.innerWidth;
-    var h = window.innerHeight;
-    var targetW = Math.round(w * dpr);
-    var targetH = Math.round(h * dpr);
-    if (playerCanvas.width !== targetW || playerCanvas.height !== targetH) {
-      playerCanvas.width = targetW;
-      playerCanvas.height = targetH;
+    var mobile = isMobilePerfMode();
+    if (playerCanvas) {
+      var dpr = mobile ? 1 : (window.devicePixelRatio || 1);
+      var w = window.innerWidth;
+      var h = window.innerHeight;
+      var targetW = Math.round(w * dpr);
+      var targetH = Math.round(h * dpr);
+      if (playerCanvas.width !== targetW || playerCanvas.height !== targetH) {
+        playerCanvas.width = targetW;
+        playerCanvas.height = targetH;
+        vizDirty = true;
+      }
+    }
+    if (turntableHaloCanvas) {
+      var haloTarget = mobile ? 260 : 460;
+      if (turntableHaloCanvas.width !== haloTarget || turntableHaloCanvas.height !== haloTarget) {
+        turntableHaloCanvas.width = haloTarget;
+        turntableHaloCanvas.height = haloTarget;
+        vizDirty = true;
+      }
     }
   }
-  window.addEventListener("resize", resizeBgVisualizer);
+  window.addEventListener("resize", resizeBgVisualizer, { passive: true });
   resizeBgVisualizer();
 
   function cycleVizMode() {
@@ -4204,6 +4278,7 @@
     state.vizMode = VIZ_MODES[(idx + 1) % VIZ_MODES.length];
     localStorage.setItem("phantom_viz_mode", state.vizMode);
     if (vizModeSelect) vizModeSelect.value = state.vizMode;
+    vizDirty = true;
     showToast(`Visualizer: ${state.vizMode.toUpperCase()}`);
   }
 
@@ -4213,6 +4288,7 @@
     vizModeSelect.addEventListener("change", function (e) {
       state.vizMode = e.target.value;
       localStorage.setItem("phantom_viz_mode", state.vizMode);
+      vizDirty = true;
     });
   }
 
@@ -4223,69 +4299,117 @@
     var h = canvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    var dynAccent = getComputedStyle(document.documentElement).getPropertyValue("--dynamic-accent").trim() || "#22c55e";
-    var dynAccentLight = getComputedStyle(document.documentElement).getPropertyValue("--dynamic-accent-light").trim() || "#86efac";
+    var dynAccent = cachedDynAccent || "#22c55e";
+    var dynAccentLight = cachedDynAccentLight || "#86efac";
 
-    var dpr = window.devicePixelRatio || 1;
+    var mobile = isMobilePerfMode();
+    var dpr = mobile ? 1 : (window.devicePixelRatio || 1);
     var cy = h / 2;
-    var barCount = 76;
+    var barCount = mobile ? 36 : 76;
     var barSpacing = w / barCount;
     var barW = Math.max(3, barSpacing * 0.58);
     var maxAmp = h * 0.36;
+    var halfBars = (barCount - 1) / 2;
 
     ctx.save();
 
-    // Pass 1: Luminous dynamic accent aura glow
-    ctx.shadowColor = dynAccent;
-    ctx.shadowBlur = 24 * dpr;
-    ctx.lineWidth = barW + 2;
-    ctx.lineCap = "round";
-    ctx.strokeStyle = dynAccent;
-    ctx.globalAlpha = 0.45;
+    if (mobile) {
+      // Mobile GPU-batched pass (zero shadowBlur, single gradient allocation, 3 batched strokes)
+      ctx.shadowBlur = 0;
+      ctx.lineCap = "round";
 
-    var halfBars = (barCount - 1) / 2;
-    for (var i = 0; i < barCount; i++) {
-      var distFromCenter = Math.abs(i - halfBars) / halfBars;
-      var dataIdx = Math.floor(distFromCenter * ((freqData ? freqData.length : 64) - 1));
-      var val = (freqData && freqData[dataIdx] !== undefined) ? freqData[dataIdx] : 8;
-
-      var normI = i / (barCount - 1);
-      var windowWeight = 0.60 + 0.40 * Math.sin(normI * Math.PI);
-      var amp = Math.max(6 * dpr, (val / 255) * maxAmp * windowWeight);
-
-      var x = i * barSpacing + barSpacing / 2;
+      // Pass 1: Batched ambient glow strokes
+      ctx.lineWidth = barW + 4;
+      ctx.strokeStyle = dynAccent;
+      ctx.globalAlpha = 0.28;
       ctx.beginPath();
-      ctx.moveTo(x, cy - amp);
-      ctx.lineTo(x, cy + amp);
+      for (var m1 = 0; m1 < barCount; m1++) {
+        var mDist = Math.abs(m1 - halfBars) / halfBars;
+        var mIdx = Math.floor(mDist * ((freqData ? freqData.length : 64) - 1));
+        var mVal = (freqData && freqData[mIdx] !== undefined) ? freqData[mIdx] : 8;
+        var mWeight = 0.60 + 0.40 * Math.sin((m1 / (barCount - 1)) * Math.PI);
+        var mAmp = Math.max(6, (mVal / 255) * maxAmp * mWeight);
+        var mx = m1 * barSpacing + barSpacing / 2;
+        ctx.moveTo(mx, cy - mAmp);
+        ctx.lineTo(mx, cy + mAmp);
+      }
       ctx.stroke();
-    }
 
-    // Pass 2: High-contrast translucent white & gradient core
-    ctx.shadowBlur = 0;
-    ctx.lineWidth = Math.max(2, barW * 0.72);
-    for (var j = 0; j < barCount; j++) {
-      var dfc = Math.abs(j - halfBars) / halfBars;
-      var dIdx = Math.floor(dfc * ((freqData ? freqData.length : 64) - 1));
-      var v = (freqData && freqData[dIdx] !== undefined) ? freqData[dIdx] : 8;
+      // Pass 2: Batched shared-gradient core strokes
+      var sharedGrad = ctx.createLinearGradient(0, cy - maxAmp, 0, cy + maxAmp);
+      sharedGrad.addColorStop(0, dynAccentLight);
+      sharedGrad.addColorStop(0.35, "rgba(255, 255, 255, 0.75)");
+      sharedGrad.addColorStop(0.5, "rgba(255, 255, 255, 0.95)");
+      sharedGrad.addColorStop(0.65, "rgba(255, 255, 255, 0.75)");
+      sharedGrad.addColorStop(1, dynAccentLight);
 
-      var nI = j / (barCount - 1);
-      var wWeight = 0.60 + 0.40 * Math.sin(nI * Math.PI);
-      var a = Math.max(6 * dpr, (v / 255) * maxAmp * wWeight);
-      var bx = j * barSpacing + barSpacing / 2;
-
-      var grad = ctx.createLinearGradient(0, cy - a, 0, cy + a);
-      grad.addColorStop(0, dynAccentLight);
-      grad.addColorStop(0.35, "rgba(255, 255, 255, 0.75)");
-      grad.addColorStop(0.5, "rgba(255, 255, 255, 0.95)");
-      grad.addColorStop(0.65, "rgba(255, 255, 255, 0.75)");
-      grad.addColorStop(1, dynAccentLight);
-
-      ctx.strokeStyle = grad;
-      ctx.globalAlpha = 0.65;
+      ctx.lineWidth = Math.max(2, barW * 0.72);
+      ctx.strokeStyle = sharedGrad;
+      ctx.globalAlpha = 0.72;
       ctx.beginPath();
-      ctx.moveTo(bx, cy - a);
-      ctx.lineTo(bx, cy + a);
+      for (var m2 = 0; m2 < barCount; m2++) {
+        var m2Dist = Math.abs(m2 - halfBars) / halfBars;
+        var m2Idx = Math.floor(m2Dist * ((freqData ? freqData.length : 64) - 1));
+        var m2Val = (freqData && freqData[m2Idx] !== undefined) ? freqData[m2Idx] : 8;
+        var m2Weight = 0.60 + 0.40 * Math.sin((m2 / (barCount - 1)) * Math.PI);
+        var m2Amp = Math.max(6, (m2Val / 255) * maxAmp * m2Weight);
+        var m2x = m2 * barSpacing + barSpacing / 2;
+        ctx.moveTo(m2x, cy - m2Amp);
+        ctx.lineTo(m2x, cy + m2Amp);
+      }
       ctx.stroke();
+    } else {
+      // Desktop Pass 1: Luminous dynamic accent aura glow
+      ctx.shadowColor = dynAccent;
+      ctx.shadowBlur = 24 * dpr;
+      ctx.lineWidth = barW + 2;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = dynAccent;
+      ctx.globalAlpha = 0.45;
+
+      for (var i = 0; i < barCount; i++) {
+        var distFromCenter = Math.abs(i - halfBars) / halfBars;
+        var dataIdx = Math.floor(distFromCenter * ((freqData ? freqData.length : 64) - 1));
+        var val = (freqData && freqData[dataIdx] !== undefined) ? freqData[dataIdx] : 8;
+
+        var normI = i / (barCount - 1);
+        var windowWeight = 0.60 + 0.40 * Math.sin(normI * Math.PI);
+        var amp = Math.max(6 * dpr, (val / 255) * maxAmp * windowWeight);
+
+        var x = i * barSpacing + barSpacing / 2;
+        ctx.beginPath();
+        ctx.moveTo(x, cy - amp);
+        ctx.lineTo(x, cy + amp);
+        ctx.stroke();
+      }
+
+      // Desktop Pass 2: High-contrast translucent white & gradient core
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = Math.max(2, barW * 0.72);
+      for (var j = 0; j < barCount; j++) {
+        var dfc = Math.abs(j - halfBars) / halfBars;
+        var dIdx = Math.floor(dfc * ((freqData ? freqData.length : 64) - 1));
+        var v = (freqData && freqData[dIdx] !== undefined) ? freqData[dIdx] : 8;
+
+        var nI = j / (barCount - 1);
+        var wWeight = 0.60 + 0.40 * Math.sin(nI * Math.PI);
+        var a = Math.max(6 * dpr, (v / 255) * maxAmp * wWeight);
+        var bx = j * barSpacing + barSpacing / 2;
+
+        var grad = ctx.createLinearGradient(0, cy - a, 0, cy + a);
+        grad.addColorStop(0, dynAccentLight);
+        grad.addColorStop(0.35, "rgba(255, 255, 255, 0.75)");
+        grad.addColorStop(0.5, "rgba(255, 255, 255, 0.95)");
+        grad.addColorStop(0.65, "rgba(255, 255, 255, 0.75)");
+        grad.addColorStop(1, dynAccentLight);
+
+        ctx.strokeStyle = grad;
+        ctx.globalAlpha = 0.65;
+        ctx.beginPath();
+        ctx.moveTo(bx, cy - a);
+        ctx.lineTo(bx, cy + a);
+        ctx.stroke();
+      }
     }
 
     // Pass 3: Central horizontal audio horizon wave
@@ -4294,8 +4418,9 @@
     ctx.lineWidth = Math.max(1.5, 1.8 * dpr);
     ctx.beginPath();
     var timeLen = timeData ? timeData.length : 64;
+    var step = mobile ? 2 : 1;
     var sliceW = w / (timeLen - 1);
-    for (var k = 0; k < timeLen; k++) {
+    for (var k = 0; k < timeLen; k += step) {
       var sample = timeData ? (timeData[k] - 128) / 128 : 0;
       var sy = cy + sample * (maxAmp * 0.45);
       var sx = k * sliceW;
@@ -4316,8 +4441,8 @@
 
     var mode = state.vizMode || "bars";
     var barCount = 22;
-    var dynAccent = getComputedStyle(document.documentElement).getPropertyValue("--dynamic-accent").trim() || "#22c55e";
-    var dynAccentLight = getComputedStyle(document.documentElement).getPropertyValue("--dynamic-accent-light").trim() || "#86efac";
+    var dynAccent = cachedDynAccent || "#22c55e";
+    var dynAccentLight = cachedDynAccentLight || "#86efac";
 
     if (mode === "bars") {
       var barW = (w / barCount) - 2;
@@ -4364,8 +4489,6 @@
     }
   }
 
-  var turntableHaloCanvas = document.getElementById("turntableHaloCanvas");
-
   function drawTurntableHalo(canvas, freqData) {
     if (!canvas) return;
     var ctx = canvas.getContext("2d");
@@ -4373,34 +4496,47 @@
     var h = canvas.height;
     ctx.clearRect(0, 0, w, h);
 
+    var mobile = isMobilePerfMode();
     var cx = w / 2;
     var cy = h / 2;
     var rBase = (w / 2) * 0.70;
-    var barCount = 54;
+    var barCount = mobile ? 36 : 54;
     var angleStep = (Math.PI * 2) / barCount;
-    var accent = getComputedStyle(document.documentElement).getPropertyValue("--accent-dynamic").trim() || "#4ade80";
+    var accent = cachedDynAccent || "#4ade80";
+    var maxBarLen = mobile ? 26 : 44;
 
     ctx.save();
-    ctx.lineWidth = 2.4;
+    ctx.lineWidth = mobile ? 2 : 2.4;
     ctx.lineCap = "round";
+    ctx.strokeStyle = accent;
 
-    for (var i = 0; i < barCount; i++) {
-      var angle = i * angleStep;
-      var val = (freqData && freqData[i % freqData.length]) ? freqData[i % freqData.length] : (state.isPlaying ? 20 : 6);
-      var barLen = state.isPlaying ? Math.max(4, (val / 255) * 44) : 4;
-      var alpha = state.isPlaying ? Math.min(0.9, 0.25 + (val / 255) * 0.75) : 0.15;
-
-      var x1 = cx + Math.cos(angle) * rBase;
-      var y1 = cy + Math.sin(angle) * rBase;
-      var x2 = cx + Math.cos(angle) * (rBase + barLen);
-      var y2 = cy + Math.sin(angle) * (rBase + barLen);
-
-      ctx.strokeStyle = accent;
-      ctx.globalAlpha = alpha;
+    if (mobile && !state.isPlaying) {
+      ctx.globalAlpha = 0.15;
       ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
+      for (var r = 0; r < barCount; r++) {
+        var rAng = r * angleStep;
+        ctx.moveTo(cx + Math.cos(rAng) * rBase, cy + Math.sin(rAng) * rBase);
+        ctx.lineTo(cx + Math.cos(rAng) * (rBase + 4), cy + Math.sin(rAng) * (rBase + 4));
+      }
       ctx.stroke();
+    } else {
+      for (var i = 0; i < barCount; i++) {
+        var angle = i * angleStep;
+        var val = (freqData && freqData[i % freqData.length]) ? freqData[i % freqData.length] : (state.isPlaying ? 20 : 6);
+        var barLen = state.isPlaying ? Math.max(4, (val / 255) * maxBarLen) : 4;
+        var alpha = state.isPlaying ? Math.min(0.9, 0.25 + (val / 255) * 0.75) : 0.15;
+
+        var x1 = cx + Math.cos(angle) * rBase;
+        var y1 = cy + Math.sin(angle) * rBase;
+        var x2 = cx + Math.cos(angle) * (rBase + barLen);
+        var y2 = cy + Math.sin(angle) * (rBase + barLen);
+
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
     }
     ctx.restore();
   }
@@ -4409,9 +4545,28 @@
     var freqBuf = new Uint8Array(64);
     var timeBuf = new Uint8Array(64);
     var phase = 0;
+    var lastDrawTime = 0;
+    var vizSettled = false;
 
-    function renderFrame() {
+    function renderFrame(now) {
+      requestAnimationFrame(renderFrame);
+      if (document.hidden) return;
+
+      var mobile = isMobilePerfMode();
+      if (mobile) {
+        if (isUserScrollingTracklist) return;
+        if (now - lastDrawTime < 33) return;
+      }
+
+      if (!state.isPlaying && vizSettled && !vizDirty) {
+        return;
+      }
+
+      lastDrawTime = now;
+      vizDirty = false;
+
       if (analyserNode && state.isPlaying) {
+        vizSettled = false;
         analyserNode.getByteFrequencyData(freqBuf);
         analyserNode.getByteTimeDomainData(timeBuf);
         var sum = 0;
@@ -4425,6 +4580,7 @@
           }
         }
       } else if (state.isPlaying) {
+        vizSettled = false;
         phase += 0.08;
         for (var i = 0; i < 64; i++) {
           var base = Math.sin(phase + i * 0.2) * 45 + Math.cos(phase * 1.5 + i * 0.4) * 35 + 95;
@@ -4432,9 +4588,15 @@
           timeBuf[i] = Math.max(0, Math.min(255, Math.floor(128 + Math.sin(phase * 2 + i * 0.3) * 60)));
         }
       } else {
+        var stillActive = false;
         for (var i = 0; i < 64; i++) {
-          freqBuf[i] = Math.max(2, Math.floor(freqBuf[i] * 0.85));
+          var decayed = Math.max(2, Math.floor(freqBuf[i] * 0.85));
+          if (decayed > 2) stillActive = true;
+          freqBuf[i] = decayed;
           timeBuf[i] = 128;
+        }
+        if (!stillActive) {
+          vizSettled = true;
         }
       }
 
@@ -4445,7 +4607,6 @@
       if (turntableHaloCanvas) {
         drawTurntableHalo(turntableHaloCanvas, freqBuf);
       }
-      requestAnimationFrame(renderFrame);
     }
     requestAnimationFrame(renderFrame);
   }
@@ -4966,12 +5127,16 @@
   }
 
   // ---------- PWA Service Worker Registration ----------
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) vizDirty = true;
+  });
+
   if ("serviceWorker" in navigator && (window.location.protocol === "http:" || window.location.protocol === "https:")) {
     window.addEventListener("load", function () {
       if ("caches" in window) {
         caches.keys().then(function (keys) {
           keys.forEach(function (k) {
-            if (k !== "daddy-music-shell-v50") {
+            if (k !== "daddy-music-shell-v51") {
               caches.delete(k).catch(function () {});
             }
           });
