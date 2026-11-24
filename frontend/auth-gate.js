@@ -140,10 +140,10 @@
       var navUserAvatar = document.getElementById("navUserAvatar");
       var navLogoutBtn = document.getElementById("navLogoutBtn");
       if (navUserBox && navUsername && navUserAvatar) {
-        var uname = user && user.username ? String(user.username) : "User";
+        var uname = user && user.username ? String(user.username) : "Guest";
         navUsername.textContent = uname;
         navUserAvatar.textContent = uname.charAt(0).toUpperCase();
-        navUserBox.style.display = "flex";
+        navUserBox.style.display = "inline-flex";
       }
       if (navLogoutBtn && !navLogoutBtn.dataset.bound) {
         navLogoutBtn.dataset.bound = "1";
