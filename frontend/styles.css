@@ -1525,7 +1525,7 @@ body.gate-active .console-wrapper {
   opacity: 0;
   transform: scale(0.94);
   pointer-events: none;
-  display: none;
+  z-index: -5;
 }
 
 .media-deck-card.video-active .cinema-stage {
@@ -1533,6 +1533,7 @@ body.gate-active .console-wrapper {
   opacity: 1;
   transform: scale(1);
   pointer-events: auto;
+  z-index: 15;
 }
 
 .video-stage-frame {

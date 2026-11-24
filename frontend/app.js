@@ -1816,6 +1816,7 @@
 
   // ---------- YouTube Music Video Modal & Last Played Restoration ----------
   var videoModal = document.getElementById("videoModal");
+  var cinemaStage = document.getElementById("cinemaStage");
   var videoModalTitle = document.getElementById("videoModalTitle");
   var videoModalArtist = document.getElementById("videoModalArtist");
   var videoLoadingOverlay = document.getElementById("videoLoadingOverlay");
@@ -1826,8 +1827,8 @@
   var nowTrackClickArea = document.getElementById("nowTrackClickArea");
   var videoStage = document.getElementById("videoStage");
 
-  // ---------- Dual Playback Engine (Audio & Synced Video) ----------
-  var activeEngine = "audio"; // "audio" | "yt"
+  // ---------- Dual Playback Engine (Unified Client-Side YT Engine Primary) ----------
+  var activeEngine = "yt"; // "yt" | "audio"
   var userInitiatedPause = false;
   var isAudioEngineReady = false;
   var ytPlayer = null;
@@ -1882,19 +1883,11 @@
 
     audioEngine.addEventListener("error", function (e) {
       if (activeEngine === "audio" && state.isPlaying && state.currentTrack) {
-        console.warn("audioEngine error, gracefully falling back to YouTube player:", e);
-        activeEngine = "yt";
-        if (ytPlayer && isYtReady && typeof ytPlayer.loadVideoById === "function") {
-          try {
-            ytPlayer.unMute();
-            ytPlayer.loadVideoById({
-              videoId: String(state.currentTrack.id),
-              startSeconds: Math.floor(audioEngine.currentTime || 0)
-            });
-            ytPlayer.playVideo();
-            startPlayKicker();
-          } catch (err) {}
-        }
+        console.warn("audioEngine error, advancing to next song:", e);
+        showToast("Audio stream error, advancing to next song...");
+        setTimeout(function () {
+          playNext();
+        }, 800);
       }
     });
   }
@@ -2051,7 +2044,11 @@
           },
           onError: function (event) {
             console.warn("YouTube player error:", event.data);
-            if (activeEngine === "yt" && (event.data === 101 || event.data === 150 || event.data === 100 || event.data === 2)) {
+            if (event.data === 101 || event.data === 150 || event.data === 153) {
+              // Embed restricted video: gracefully fall back to backend stream proxy
+              console.warn("YouTube embed restricted (code " + event.data + "), falling back to /api/stream...");
+              fallbackToAudioEngine(getPlayerCurrentTime());
+            } else if (activeEngine === "yt" && (event.data === 100 || event.data === 2)) {
               showToast("Track unavailable, auto-advancing to next song...");
               setTimeout(function () {
                 playNext();
@@ -2062,6 +2059,32 @@
       });
     } catch (e) {
       console.error("Failed to initialize YouTube player:", e);
+    }
+  }
+
+  function fallbackToAudioEngine(resumeTime) {
+    if (!state.currentTrack) return;
+    activeEngine = "audio";
+    applySingleSourceAudioRule();
+    if (ytPlayer && typeof ytPlayer.pauseVideo === "function") {
+      try { ytPlayer.pauseVideo(); } catch (e) {}
+    }
+    if (audioEngine) {
+      var vid = String(state.currentTrack.id);
+      var qParam = encodeURIComponent((state.currentTrack.artist || "") + " - " + (state.currentTrack.title || ""));
+      var streamUrl = `${API_BASE}/stream?id=${encodeURIComponent(vid)}&q=${qParam}`;
+      ensureAudioContextRunning();
+      audioEngine.src = streamUrl;
+      try { audioEngine.currentTime = resumeTime || 0; } catch (e) {}
+      applySingleSourceAudioRule();
+      applySpeedToPlayer(state.playbackRate);
+      audioEngine.play().then(function () {
+        state.isPlaying = true;
+        updatePlayerUI();
+        if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
+      }).catch(function (err) {
+        console.warn("Fallback audioEngine.play() error:", err);
+      });
     }
   }
 
@@ -2327,7 +2350,9 @@
     var deck = document.getElementById("mediaDeckCard");
     var modeAudioTab = document.getElementById("modeAudioTab");
     var modeVideoTab = document.getElementById("modeVideoTab");
+    var cinemaStage = document.getElementById("cinemaStage");
     if (deck) deck.classList.add("video-active");
+    if (cinemaStage) cinemaStage.classList.remove("hidden");
     if (modeAudioTab) modeAudioTab.classList.remove("active");
     if (modeVideoTab) modeVideoTab.classList.add("active");
 
@@ -2337,33 +2362,39 @@
     if (videoModalArtist && state.currentTrack) videoModalArtist.textContent = state.currentTrack.artist;
 
     if (state.currentTrack) {
-      // 1. Capture exact timestamp before pausing audio
-      var resumeTime = 0;
-      if (audioEngine && typeof audioEngine.currentTime === "number" && !isNaN(audioEngine.currentTime)) {
-        resumeTime = audioEngine.currentTime;
+      if (activeEngine !== "yt") {
+        var resumeTime = 0;
+        if (audioEngine && typeof audioEngine.currentTime === "number" && !isNaN(audioEngine.currentTime)) {
+          resumeTime = audioEngine.currentTime;
+        } else {
+          resumeTime = getPlayerCurrentTime();
+        }
+        var wasPlaying = state.isPlaying;
+        activeEngine = "yt";
+
+        if (audioEngine) {
+          try { audioEngine.pause(); } catch (e) {}
+        }
+        applySingleSourceAudioRule();
+
+        if (ytPlayer && isYtReady && typeof ytPlayer.loadVideoById === "function") {
+          try {
+            ytPlayer.loadVideoById({
+              videoId: String(state.currentTrack.id),
+              startSeconds: Math.floor(resumeTime)
+            });
+            applySingleSourceAudioRule();
+            if (wasPlaying && !userInitiatedPause) {
+              ytPlayer.playVideo();
+              startPlayKicker();
+            }
+          } catch (e) {}
+        }
       } else {
-        resumeTime = getPlayerCurrentTime();
-      }
-      var wasPlaying = state.isPlaying;
-      activeEngine = "yt";
-
-      if (audioEngine) {
-        try { audioEngine.pause(); } catch (e) {}
-      }
-      applySingleSourceAudioRule();
-
-      if (ytPlayer && isYtReady && typeof ytPlayer.loadVideoById === "function") {
-        try {
-          ytPlayer.loadVideoById({
-            videoId: String(state.currentTrack.id),
-            startSeconds: Math.floor(resumeTime)
-          });
-          applySingleSourceAudioRule();
-          if (wasPlaying && !userInitiatedPause) {
-            ytPlayer.playVideo();
-            startPlayKicker();
-          }
-        } catch (e) {}
+        applySingleSourceAudioRule();
+        if (state.isPlaying && !userInitiatedPause && ytPlayer && typeof ytPlayer.playVideo === "function") {
+          try { ytPlayer.playVideo(); } catch (e) {}
+        }
       }
     }
     updatePlayerUI();
@@ -2373,70 +2404,20 @@
     var deck = document.getElementById("mediaDeckCard");
     var modeAudioTab = document.getElementById("modeAudioTab");
     var modeVideoTab = document.getElementById("modeVideoTab");
+    var cinemaStage = document.getElementById("cinemaStage");
     if (deck) deck.classList.remove("video-active");
+    if (cinemaStage) cinemaStage.classList.add("hidden");
     if (modeAudioTab) modeAudioTab.classList.add("active");
     if (modeVideoTab) modeVideoTab.classList.remove("active");
 
     if (videoModal) videoModal.classList.add("hidden");
     if (videoToggleBtn) videoToggleBtn.classList.remove("active");
 
-    if (state.currentTrack) {
-      // 1. Capture exact timestamp from video player immediately before switching modes
-      var resumeTime = 0;
-      if (ytPlayer && typeof ytPlayer.getCurrentTime === "function") {
-        try { resumeTime = ytPlayer.getCurrentTime() || 0; } catch (e) {}
-      } else {
-        resumeTime = getPlayerCurrentTime();
-      }
-
-      var wasPlaying = state.isPlaying;
-      activeEngine = "audio";
-
-      // Pause and mute video player
-      if (ytPlayer && typeof ytPlayer.pauseVideo === "function") {
-        try { ytPlayer.pauseVideo(); } catch (e) {}
-      }
-
-      if (audioEngine) {
-        var vid = String(state.currentTrack.id);
-        var qParam = encodeURIComponent((state.currentTrack.artist || "") + " - " + (state.currentTrack.title || ""));
-        var targetSrc = `${API_BASE}/stream?id=${encodeURIComponent(vid)}&q=${qParam}`;
-
-        // Never reassign audio.src if the same track is already loaded!
-        var isSameTrack = audioEngine.src && (
-          audioEngine.src === targetSrc ||
-          audioEngine.src.includes(`id=${encodeURIComponent(vid)}`) ||
-          audioEngine.src.includes(vid)
-        );
-
-        if (!isSameTrack) {
-          audioEngine.src = targetSrc;
-        }
-
-        applySingleSourceAudioRule();
-
-        function resumeAudioPlayback() {
-          try {
-            audioEngine.currentTime = resumeTime;
-          } catch (e) {}
-          applySingleSourceAudioRule();
-          if (wasPlaying && !userInitiatedPause) {
-            audioEngine.play().catch(function () {});
-            state.isPlaying = true;
-            updatePlayerUI();
-            if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
-          }
-        }
-
-        // 2. Preserve Exact Timestamp: Seek immediately if readyState >= 1, otherwise on loadedmetadata
-        if (audioEngine.readyState >= 1) {
-          resumeAudioPlayback();
-        } else {
-          audioEngine.addEventListener("loadedmetadata", function onMeta() {
-            audioEngine.removeEventListener("loadedmetadata", onMeta);
-            resumeAudioPlayback();
-          }, { once: true });
-        }
+    // Continuous full-length audio: keep ytPlayer streaming in the compositor-visible stage!
+    if (activeEngine === "yt") {
+      applySingleSourceAudioRule();
+      if (state.isPlaying && !userInitiatedPause && ytPlayer && typeof ytPlayer.playVideo === "function") {
+        try { ytPlayer.playVideo(); } catch (e) {}
       }
     }
     updatePlayerUI();
@@ -2571,84 +2552,33 @@
     loadLyrics(track.title, track.artist, trackDur);
 
     var vid = String(track.id);
-    var isVideoOpen = videoModal && !videoModal.classList.contains("hidden");
 
-    if (isVideoOpen) {
-      activeEngine = "yt";
-      applySingleSourceAudioRule();
-      if (audioEngine) {
-        try { audioEngine.pause(); } catch (e) {}
-      }
-      if (ytPlayer && isYtReady && typeof ytPlayer.loadVideoById === "function") {
-        try {
-          ytPlayer.loadVideoById({
-            videoId: vid,
-            startSeconds: 0
-          });
-          applySingleSourceAudioRule();
-          ytPlayer.playVideo();
-          startPlayKicker();
-          if (state.playbackRate && state.playbackRate !== 1.0) {
-            applySpeedToPlayer(state.playbackRate);
-          }
-        } catch (e) {
-          console.error("Error loading video in ytPlayer:", e);
+    // Prioritize unified client-side YT.Player iframe playback for full-length songs
+    activeEngine = "yt";
+    applySingleSourceAudioRule();
+    if (audioEngine) {
+      try { audioEngine.pause(); } catch (e) {}
+    }
+    if (ytPlayer && isYtReady && typeof ytPlayer.loadVideoById === "function") {
+      try {
+        ytPlayer.loadVideoById({
+          videoId: vid,
+          startSeconds: 0
+        });
+        applySingleSourceAudioRule();
+        ytPlayer.playVideo();
+        startPlayKicker();
+        if (state.playbackRate && state.playbackRate !== 1.0) {
+          applySpeedToPlayer(state.playbackRate);
         }
-      } else {
-        pendingTrackId = vid;
-        pendingPlay = true;
-        initYtPlayer();
+      } catch (e) {
+        console.error("Error loading track in ytPlayer, falling back to /api/stream:", e);
+        fallbackToAudioEngine(0);
       }
     } else {
-      activeEngine = "audio";
-      applySingleSourceAudioRule();
-      if (ytPlayer && typeof ytPlayer.pauseVideo === "function") {
-        try { ytPlayer.pauseVideo(); } catch (e) {}
-      }
-      if (ytPlayer && isYtReady && typeof ytPlayer.cueVideoById === "function") {
-        try {
-          ytPlayer.cueVideoById({
-            videoId: vid,
-            startSeconds: 0
-          });
-        } catch (e) {}
-      } else {
-        pendingTrackId = vid;
-        pendingPlay = false;
-        initYtPlayer();
-      }
-
-      var qParam = encodeURIComponent((track.artist || "") + " - " + (track.title || ""));
-      var streamUrl = `${API_BASE}/stream?id=${encodeURIComponent(vid)}&q=${qParam}`;
-      if (audioEngine) {
-        ensureAudioContextRunning();
-        audioEngine.src = streamUrl;
-        audioEngine.currentTime = 0;
-        applySingleSourceAudioRule();
-        applySpeedToPlayer(state.playbackRate);
-        var playPromise = audioEngine.play();
-        if (playPromise !== undefined) {
-          playPromise.then(function () {
-            state.isPlaying = true;
-            updatePlayerUI();
-            if ("mediaSession" in navigator) {
-              navigator.mediaSession.playbackState = "playing";
-            }
-          }).catch(function (err) {
-            console.warn("Audio play() blocked or error, falling back to ytPlayer:", err);
-            activeEngine = "yt";
-            applySingleSourceAudioRule();
-            if (ytPlayer && isYtReady && typeof ytPlayer.loadVideoById === "function") {
-              try {
-                ytPlayer.loadVideoById({ videoId: vid, startSeconds: 0 });
-                applySingleSourceAudioRule();
-                ytPlayer.playVideo();
-                startPlayKicker();
-              } catch (e) {}
-            }
-          });
-        }
-      }
+      pendingTrackId = vid;
+      pendingPlay = true;
+      initYtPlayer();
     }
 
     if (!skipRoomBroadcast) {
@@ -4931,52 +4861,9 @@
     }
   }, true);
 
-  // Seamless background playback when switching apps or locking mobile screen
+  // Background playback continuity across tab switches
   document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "hidden") {
-      // Chrome mobile is being backgrounded or screen locked!
-      // If ytPlayer is active, mobile Chrome suspends video iframes. Transfer seamlessly to audioEngine!
-      if (state.isPlaying && activeEngine === "yt" && state.currentTrack) {
-        var cur = getPlayerCurrentTime();
-        activeEngine = "audio";
-        try {
-          if (ytPlayer && typeof ytPlayer.pauseVideo === "function") {
-            ytPlayer.pauseVideo();
-          }
-        } catch (e) {}
-        if (audioEngine) {
-          var vid = String(state.currentTrack.id);
-          var qParam = encodeURIComponent((state.currentTrack.artist || "") + " - " + (state.currentTrack.title || ""));
-          var targetSrc = `${API_BASE}/stream?id=${encodeURIComponent(vid)}&q=${qParam}`;
-          if (!audioEngine.src || !audioEngine.src.includes(encodeURIComponent(vid))) {
-            audioEngine.src = targetSrc;
-          }
-          audioEngine.currentTime = cur;
-          ensureAudioContextRunning();
-          audioEngine.play().catch(function (err) {
-            console.warn("Background audio engine resume error:", err);
-          });
-          if ("mediaSession" in navigator) {
-            navigator.mediaSession.playbackState = "playing";
-          }
-        }
-      }
-    } else if (document.visibilityState === "visible") {
-      // User returned to Daddy's Music tab
-      if (state.isPlaying && videoModal && !videoModal.classList.contains("hidden") && state.currentTrack) {
-        var cur = getPlayerCurrentTime();
-        activeEngine = "yt";
-        if (audioEngine) {
-          try { audioEngine.pause(); } catch (e) {}
-        }
-        if (ytPlayer && typeof ytPlayer.seekTo === "function") {
-          try {
-            ytPlayer.seekTo(cur, true);
-            ytPlayer.playVideo();
-          } catch (e) {}
-        }
-      }
-    }
+    // Both activeEngine === "yt" and "audio" remain playing without forced proxy downgrade.
   });
 
   // ---------- Mobile Touch Audio Primer ----------
@@ -5052,7 +4939,7 @@
       if ("caches" in window) {
         caches.keys().then(function (keys) {
           keys.forEach(function (k) {
-            if (k !== "daddy-music-shell-v48") {
+            if (k !== "daddy-music-shell-v49") {
               caches.delete(k).catch(function () {});
             }
           });

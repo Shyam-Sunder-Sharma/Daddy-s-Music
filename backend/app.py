@@ -428,15 +428,16 @@ def search_youtube_innertube(query, limit=20):
         ytm_headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Referer': 'https://music.youtube.com/',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept-Language': 'en-IN,en;q=0.9'
         }
         ytm_body = {
             'context': {
                 'client': {
                     'clientName': 'WEB_REMIX',
-                    'clientVersion': '1.20250312.01.00',
+                    'clientVersion': '1.20260101.01.00',
                     'hl': 'en',
-                    'gl': 'US'
+                    'gl': 'IN'
                 }
             },
             'query': q_clean,
@@ -541,14 +542,15 @@ def search_youtube_innertube(query, limit=20):
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Content-Type': 'application/json',
+            'Accept-Language': 'en-IN,en;q=0.9'
         }
         body = {
             'context': {
                 'client': {
                     'clientName': 'WEB',
-                    'clientVersion': '2.20250312.04.00',
+                    'clientVersion': '2.20260101.04.00',
                     'hl': 'en',
-                    'gl': 'US'
+                    'gl': 'IN'
                 }
             },
             'query': search_q,
@@ -699,6 +701,10 @@ _YDL_ANDROID = yt_dlp.YoutubeDL({
     'noplaylist': True,
     'socket_timeout': 12,
     'format': 'best/bestvideo+bestaudio/all',
+    'http_headers': {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-IN,en;q=0.9'
+    },
     'extractor_args': {
         'youtube': {
             'player_client': ['android', 'ios'],
@@ -713,6 +719,10 @@ _YDL_TV_IOS = yt_dlp.YoutubeDL({
     'noplaylist': True,
     'socket_timeout': 12,
     'format': 'best/bestvideo+bestaudio/all',
+    'http_headers': {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-IN,en;q=0.9'
+    },
     'extractor_args': {
         'youtube': {
             'player_client': ['tv_embedded', 'ios', 'mweb']
@@ -912,13 +922,18 @@ def fast_search_youtube_video(query, need_video=False):
             try:
                 resp = HTTP_SESSION.post(
                     "https://www.youtube.com/youtubei/v1/search?prettyPrint=false",
+                    headers={
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Content-Type': 'application/json',
+                        'Accept-Language': 'en-IN,en;q=0.9'
+                    },
                     json={
                         "context": {
                             "client": {
                                 "clientName": client_name,
-                                "clientVersion": "2.20250312.04.00",
+                                "clientVersion": "2.20260101.04.00",
                                 "hl": "en",
-                                "gl": "US"
+                                "gl": "IN"
                             }
                         },
                         "query": cand
@@ -1445,6 +1460,7 @@ def resolve_track_streams(target_query, track_id, force_refresh=False, need_vide
         final_audio = prev_cached.get('audio_url') or saavn_url or it_audio or it_video
         final_video = it_video or prev_cached.get('video_url') or final_audio
         if final_audio:
+            is_preview = bool(it_audio and final_audio == it_audio and not saavn_url and not prev_cached.get('audio_url'))
             entry_data = {
                 'audio_url': final_audio,
                 'audio_mime': prev_cached.get('audio_mime') or 'audio/mp4',
@@ -1453,6 +1469,7 @@ def resolve_track_streams(target_query, track_id, force_refresh=False, need_vide
                 'video_mime': 'video/mp4',
                 'video_headers': {},
                 'needs_yt_video': False,
+                'is_preview': is_preview,
                 'ts': time.time()
             }
             STREAM_CACHE[track_id] = entry_data
@@ -1866,9 +1883,11 @@ def serve_progressive_stream(track_id, query_target, kind="audio", transcode=Fal
         'Accept-Ranges': 'bytes',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Range, Authorization, Content-Type',
-        'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges'
+        'Access-Control-Allow-Headers': 'Range, Authorization, Content-Type, X-Is-Preview',
+        'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges, X-Is-Preview'
     }
+    if resolved.get('is_preview'):
+        resp_headers['X-Is-Preview'] = '1'
 
     status_code = 200
     if range_header and total_size > 0 and end is not None:
