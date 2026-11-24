@@ -102,7 +102,8 @@ html, body {
   padding: 0;
   height: 100%;
   width: 100%;
-  overflow: hidden;
+  max-width: 100vw;
+  overflow-x: hidden;
   background-color: var(--bg-base);
   color: var(--text-main);
   font-family: var(--font-ui);
@@ -117,9 +118,11 @@ body {
   position: relative;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  max-height: 100vh;
-  overflow: hidden;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 /* Scrollbar aesthetic */
@@ -1522,10 +1525,10 @@ body.gate-active .console-wrapper {
 }
 
 .cinema-stage.hidden {
-  opacity: 0;
+  opacity: 0.005;
   transform: scale(0.94);
   pointer-events: none;
-  z-index: -5;
+  z-index: 1;
 }
 
 .media-deck-card.video-active .cinema-stage {
@@ -3536,165 +3539,746 @@ body.gate-active .console-wrapper {
 }
 
 /* --------------------------------------------------------------------------
-   18. RESPONSIVE BREAKPOINTS (ALL PHONES & SCREENS)
+   18. RESPONSIVE BREAKPOINTS (ALL PHONES & MOBILE SCREENS <= 900px)
    -------------------------------------------------------------------------- */
 @media (max-width: 900px) {
+  /* Prevent horizontal overflow on entire mobile document */
+  html,
+  body {
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    height: auto !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+  }
+
+  /* Viewport Height & Safe-Area Foundation */
   .app,
   .app-shell,
   .console-wrapper {
-    height: 100vh !important;
-    height: 100dvh !important;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    width: 100% !important;
+    max-width: 100vw !important;
+    height: auto !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: max(8px, env(safe-area-inset-top, 8px)) 0 calc(18px + env(safe-area-inset-bottom, 12px)) !important;
+    gap: 12px !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
   }
 
-  .console-top-pill {
-    margin: 8px 12px 0;
-    padding: 6px 12px;
-    gap: 8px;
+  /* A. Compact Adaptive Top Header */
+  .console-top-pill,
+  .top-command-bar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    margin: 4px 8px 0 !important;
+    padding: 8px 10px !important;
+    gap: 8px 6px !important;
+    border-radius: var(--radius-xl) !important;
+    width: calc(100% - 16px) !important;
+    box-sizing: border-box !important;
   }
 
-  .telemetry-chip {
-    display: none;
+  /* Row 1 Left: Brand Logo + 3-bar Mini-EQ */
+  .pill-brand-area {
+    order: 1 !important;
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    max-width: calc(100% - 120px) !important;
+    gap: 6px !important;
   }
 
-  .mobile-menu-btn {
-    display: inline-flex;
+  .brand-monogram {
+    gap: 6px !important;
+    min-width: 0 !important;
+  }
+
+  .brand-titles {
+    min-width: 0 !important;
+  }
+
+  .brand-wordmark-row {
+    gap: 4px !important;
+    min-width: 0 !important;
+  }
+
+  .brand-main {
+    font-size: clamp(12px, 3.5vw, 14.5px) !important;
+    letter-spacing: 0.02em !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    min-width: 0 !important;
+  }
+
+  .brand-mini-eq {
+    height: 10px !important;
+    gap: 2px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Brand Tooltip Centered Mobile Constraint */
+  .brand-hover-tooltip {
+    left: 50% !important;
+    transform: translateX(-50%) translateY(-4px) !important;
+    max-width: calc(100vw - 32px) !important;
+    width: max-content !important;
+    white-space: normal !important;
+    text-align: center !important;
+    font-size: 11.5px !important;
+    line-height: 1.35 !important;
+    padding: 6px 12px !important;
+    box-sizing: border-box !important;
+  }
+
+  .brand-wordmark-row:hover .brand-hover-tooltip,
+  .brand-main:hover ~ .brand-hover-tooltip {
+    transform: translateX(-50%) translateY(0) !important;
+  }
+
+  /* Row 1 Right: Icon-friendly System Cluster */
+  .top-action-cluster {
+    order: 2 !important;
+    flex: 0 0 auto !important;
+    gap: 4px !important;
+    margin-left: auto !important;
   }
 
   #masterAudioLabel,
-  #listenAlongLabel {
-    display: none;
+  #listenAlongLabel,
+  .telemetry-chip,
+  .nav-username,
+  .nav-user-divider {
+    display: none !important;
   }
 
   #masterAudioBtn,
   #listenAlongBtn {
-    padding: 6px 10px;
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    justify-content: center !important;
   }
 
+  .nav-user-box {
+    height: 30px !important;
+    padding: 2px 4px !important;
+    gap: 3px !important;
+  }
+
+  .nav-user-avatar {
+    width: 22px !important;
+    height: 22px !important;
+    min-width: 22px !important;
+    font-size: 10.5px !important;
+  }
+
+  .nav-logout-btn {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .mobile-menu-btn {
+    display: none !important;
+  }
+
+  /* Row 2: Full-Width Mobile Search Bar directly beneath Row 1 */
+  .spotlight-search-wrap {
+    order: 3 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-top: 2px !important;
+  }
+
+  .spotlight-search-wrap input {
+    height: 40px !important;
+    font-size: 13px !important;
+    padding: 8px 36px 8px 38px !important;
+    border-radius: var(--radius-full) !important;
+  }
+
+  .spotlight-search-wrap:focus-within input,
+  .spotlight-search-wrap input:focus {
+    transform: none !important;
+  }
+
+  .search-floating-dropdown {
+    top: calc(100% + 6px) !important;
+    max-height: 340px !important;
+    border-radius: var(--radius-md) !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* B. Single-Column Stacked Bento Cards */
   .bento-console {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto;
-    gap: 16px;
-    padding: 12px 12px 20px;
-    height: auto;
-    min-height: auto;
-    max-height: none;
-    overflow: visible;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 14px !important;
+    padding: 8px 12px calc(18px + env(safe-area-inset-bottom, 14px)) !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
   }
 
+  /* Card 1 — Mobile Player & Turntable Deck */
   .media-deck-card {
-    height: auto;
-    min-height: 520px;
-    padding: 14px 14px 16px;
+    height: auto !important;
+    min-height: auto !important;
+    padding: 14px 14px 16px !important;
+    border-radius: var(--radius-xl) !important;
+    overflow: visible !important;
   }
 
-  .deck-stage-viewport {
-    height: 290px;
+  /* Top Strip: Status & Mode Switch */
+  .deck-telemetry-bar {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-wrap: nowrap !important;
+    padding-bottom: 8px !important;
+    margin-bottom: 2px !important;
   }
 
-  .turntable-stage {
-    transform: scale(0.78);
+  .telemetry-badge {
+    font-size: 11px !important;
+    padding: 3px 8px !important;
+    white-space: nowrap !important;
   }
 
-  .turntable-halo-canvas {
-    width: 380px;
-    height: 380px;
-  }
-
-  .deck-title {
-    font-size: 1.25rem;
-  }
-
-  .master-play-stomp {
-    width: 52px;
-    height: 52px;
-  }
-
-  .tactile-key {
-    width: 36px;
-    height: 36px;
-  }
-
-  .key-nav {
-    width: 38px;
-    height: 38px;
-  }
-
-  .tactile-vol {
-    display: none;
-  }
-
-  .stream-panel-card {
-    height: auto;
-    min-height: 480px;
-    padding: 14px 12px 16px;
-    overflow: visible;
-  }
-}
-
-@media (max-width: 480px) {
-  .brand-main {
-    font-size: 16px;
-  }
-
-  .deck-stage-viewport {
-    height: 250px;
-  }
-
-  .turntable-stage {
-    transform: scale(0.66);
-  }
-
-  .deck-title {
-    font-size: 1.10rem;
-  }
-
-  .deck-artist-row {
-    font-size: 0.78rem;
-  }
-
-  .deck-ctrls-left {
-    gap: 6px;
-  }
-
-  .master-play-stomp {
-    width: 48px;
-    height: 48px;
-  }
-}
-
-@media (max-width: 360px) {
-  .deck-stage-viewport {
-    height: 220px;
-  }
-
-  .turntable-stage {
-    transform: scale(0.58);
+  .deck-mode-toggle-wrap {
+    flex-shrink: 0 !important;
   }
 
   .mode-tab {
-    font-size: 0.62rem;
-    padding: 4px 8px;
+    font-size: 11px !important;
+    padding: 3px 10px !important;
+    white-space: nowrap !important;
+  }
+
+  /* Fluid Turntable Scaling (Zero Horizontal Clipping) */
+  .deck-stage-viewport {
+    height: auto !important;
+    min-height: clamp(230px, 58vw, 290px) !important;
+    padding: 8px 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: relative !important;
+  }
+
+  .turntable-stage {
+    width: 100% !important;
+    max-width: clamp(230px, 64vw, 300px) !important;
+    height: clamp(190px, 52vw, 250px) !important;
+    transform: none !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: relative !important;
+  }
+
+  .turntable-platter {
+    width: clamp(165px, 46vw, 220px) !important;
+    height: clamp(165px, 46vw, 220px) !important;
+  }
+
+  .vinyl-record {
+    width: clamp(145px, 40vw, 190px) !important;
+    height: clamp(145px, 40vw, 190px) !important;
+  }
+
+  .vinyl-label {
+    width: clamp(62px, 17vw, 82px) !important;
+    height: clamp(62px, 17vw, 82px) !important;
+  }
+
+  .turntable-halo-canvas {
+    width: clamp(230px, 64vw, 300px) !important;
+    height: clamp(230px, 64vw, 300px) !important;
+  }
+
+  .tonearm-assembly {
+    right: -12px !important;
+    top: 2px !important;
+    height: clamp(155px, 43vw, 210px) !important;
+    width: clamp(65px, 18vw, 85px) !important;
+    transform: scale(0.85) !important;
+    transform-origin: top right !important;
+  }
+
+  /* Synced Lyrics Pill */
+  .inline-lyrics-ticker {
+    margin-top: 12px !important;
+    margin-bottom: 12px !important;
+    padding: 6px 14px !important;
+    font-size: 12px !important;
+    max-width: 92% !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  /* Title & Action Row */
+  .deck-metadata-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .deck-meta-info {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+  }
+
+  .deck-title {
+    font-size: clamp(17px, 4.8vw, 21px) !important;
+    white-space: normal !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    line-height: 1.25 !important;
+  }
+
+  .deck-artist {
+    font-size: 13px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    margin-top: 2px !important;
+  }
+
+  .deck-meta-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .deck-icon-action {
+    min-width: 40px !important;
+    min-height: 40px !important;
+    width: 40px !important;
+    height: 40px !important;
+    padding: 8px !important;
+  }
+
+  .deck-icon-action svg {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  /* Touch-Friendly Scrubber */
+  .deck-scrubber-wrap {
+    width: 100% !important;
+    margin-top: 10px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .full-width-seek {
+    height: 26px !important;
+    display: flex !important;
+    align-items: center !important;
+    cursor: pointer !important;
+  }
+
+  .full-width-seek .seek-track {
+    height: 5px !important;
+  }
+
+  .full-width-seek .seek-thumb {
+    width: 14px !important;
+    height: 14px !important;
+    opacity: 1 !important;
+  }
+
+  .deck-time-row {
+    margin-top: 2px !important;
+    font-size: 11px !important;
+  }
+
+  /* Transport Row & Minimalist Controls */
+  .deck-single-row-console {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+    margin-top: 10px !important;
+    padding: 2px 0 !important;
+    gap: 6px !important;
+  }
+
+  .console-zone-left {
+    flex: 0 0 auto !important;
+  }
+
+  .console-zone-center {
+    flex: 0 0 auto !important;
+    gap: clamp(12px, 3.8vw, 20px) !important;
+  }
+
+  .console-zone-right {
+    flex: 0 0 auto !important;
+    gap: clamp(6px, 2vw, 10px) !important;
+  }
+
+  .deck-ctrl-btn {
+    min-width: 38px !important;
+    min-height: 38px !important;
+    padding: 6px !important;
+  }
+
+  .transport-hero-play {
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px !important;
+    min-height: 48px !important;
+  }
+
+  .deck-vol-wrap {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  .deck-vol-slider {
+    width: 48px !important;
+  }
+
+  /* C. Card 2 — Mobile Catalog, Queue & Playlists Panel */
+  .stream-panel-card {
+    height: auto !important;
+    min-height: 420px !important;
+    max-height: 68dvh !important;
+    padding: 14px 12px 16px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    border-radius: var(--radius-xl) !important;
+  }
+
+  .stream-tabs-bar {
+    margin-bottom: 8px !important;
+    padding: 3px !important;
+  }
+
+  .stream-tab {
+    padding: 6px 0 !important;
+    font-size: 12px !important;
+  }
+
+  /* Horizontally Scrollable Filter Row */
+  .stream-filters-row {
+    display: flex !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    padding-bottom: 6px !important;
+    margin-bottom: 8px !important;
+    gap: 6px !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .stream-filters-row::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .filter-pill {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    padding: 5px 12px !important;
+    font-size: 12px !important;
+  }
+
+  /* Responsive Stream Pane Header */
+  .stream-pane-header {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px 10px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .stream-pane-title-group {
+    flex: 1 1 auto !important;
+    min-width: 140px !important;
+  }
+
+  .stream-title {
+    font-size: 1.05rem !important;
+  }
+
+  .stream-hint {
+    font-size: 11.5px !important;
+  }
+
+  .view-actions {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    align-items: center !important;
+  }
+
+  .action-btn {
+    height: 30px !important;
+    padding: 0 10px !important;
+    font-size: 11.5px !important;
+    gap: 4px !important;
+  }
+
+  /* Internal Momentum Scrolling */
+  .track-list.stream-track-list {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  #trackContainer,
+  .queue-list,
+  .playlist-grid {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Touch-Optimized Track Rows */
+  .track-row {
+    min-height: 52px !important;
+    height: 52px !important;
+    padding: 5px 8px !important;
+    gap: 8px !important;
+  }
+
+  .t-main {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    gap: 8px !important;
+  }
+
+  .track-row .cover {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    border-radius: 8px !important;
+  }
+
+  .track-row .idx {
+    display: none !important;
+  }
+
+  .track-row .t-meta {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .track-row .t-title {
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 100% !important;
+    display: block !important;
+  }
+
+  .track-row .t-artist {
+    font-size: 11px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 100% !important;
+    display: block !important;
+  }
+
+  .track-row .t-dur {
+    font-size: 11px !important;
+    min-width: 26px !important;
+    color: rgba(255, 255, 255, 0.75) !important;
+    margin-left: 2px !important;
+  }
+
+  .track-row .t-actions {
+    opacity: 1 !important;
+    gap: 2px !important;
+  }
+
+  .track-row .track-add-btn {
+    display: none !important;
+  }
+
+  .track-row .icon-btn,
+  .track-fav-btn,
+  .track-more-btn,
+  .track-delete-btn,
+  .track-row .remove-track {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    padding: 0 !important;
+  }
+
+  /* 4. Responsive Modals (Equalizer, Listen Along, Playlists, Lyrics, Palette) */
+  .eq-modal,
+  .lyrics-modal,
+  .modal-box,
+  .cmd-palette-box,
+  .listen-along-box {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: 85dvh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: 18px 14px !important;
+    border-radius: var(--radius-lg) !important;
+    box-sizing: border-box !important;
+  }
+
+  .eq-sliders {
+    padding: 12px 4px 18px !important;
+    gap: 6px !important;
+  }
+
+  .eq-band input[type="range"] {
+    height: 95px !important;
+  }
+
+  .cmd-shortcuts-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .lyric-line {
+    font-size: 1.25rem !important;
+  }
+
+  .lyric-line.active {
+    font-size: 1.55rem !important;
   }
 }
 
-@media (max-height: 850px) {
-  .deck-stage-viewport {
-    padding: 14px 0;
+/* Extra-Narrow Mobile Screens (< 400px, e.g. iPhone SE 375px, Galaxy S24 360px) */
+@media (max-width: 400px) {
+  .deck-vol-slider {
+    display: none !important;
   }
-  .turntable-stage {
-    height: 260px;
-    transform: scale(0.90);
+
+  .deck-vol-wrap {
+    gap: 0 !important;
+  }
+
+  .deck-vol-wrap .vol-icon {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+    border-radius: var(--radius-full) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+    touch-action: manipulation !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    transition: all 0.15s ease !important;
+  }
+
+  .deck-vol-wrap .vol-icon:active {
+    background: rgba(255, 255, 255, 0.22) !important;
+    transform: scale(0.96) !important;
+  }
+
+  .deck-vol-wrap .vol-icon.is-muted {
+    opacity: 0.55 !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .console-zone-center {
+    gap: 10px !important;
+  }
+
+  .brand-main {
+    font-size: 13px !important;
+    letter-spacing: 0.02em !important;
+  }
+
+  .nav-username {
+    display: none !important;
+  }
+
+  .nav-user-divider {
+    display: none !important;
   }
 }
 
-@media (max-height: 720px) {
-  .deck-stage-viewport {
-    padding: 8px 0;
+/* Ultra-Narrow & Compact Mobile Screens (<= 380px, e.g. iPhone SE 375px, Galaxy S24 360px) */
+@media (max-width: 380px) {
+  .brand-main {
+    font-size: 12px !important;
+    letter-spacing: 0.01em !important;
   }
-  .turntable-stage {
-    height: 220px;
-    transform: scale(0.81);
+
+  .brand-status-led {
+    display: none !important;
+  }
+
+  .deck-stage-viewport {
+    min-height: 220px !important;
+  }
+
+  .mode-tab {
+    font-size: 10px !important;
+    padding: 3px 7px !important;
+  }
+
+  .telemetry-badge {
+    font-size: 10px !important;
+    padding: 2px 6px !important;
+  }
+
+  .console-zone-center {
+    gap: 8px !important;
+  }
+
+  .transport-hero-play {
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+
+  .deck-ctrl-btn {
+    min-width: 34px !important;
+    min-height: 34px !important;
   }
 }

@@ -2183,6 +2183,20 @@
     }
   }
 
+  function updateVolIconUI() {
+    var icon = document.querySelector(".deck-vol-wrap .vol-icon");
+    if (!icon) return;
+    var isMuted = masterVolume <= 0.02;
+    icon.setAttribute("aria-label", isMuted ? "Unmute" : "Mute");
+    icon.setAttribute("data-muted", isMuted ? "true" : "false");
+    icon.classList.toggle("is-muted", isMuted);
+    if (isMuted) {
+      icon.innerHTML = '<path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>';
+    } else {
+      icon.innerHTML = '<path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>';
+    }
+  }
+
   function setPlayerVolume(vol) {
     vol = Math.max(0, Math.min(1, vol));
     masterVolume = vol;
@@ -2190,6 +2204,7 @@
     localStorage.setItem("phantom_volume", vol);
     if (volSlider) volSlider.value = Math.round(vol * 100);
     applySingleSourceAudioRule();
+    updateVolIconUI();
   }
 
   function applySpeedToPlayer(speed) {
@@ -3464,6 +3479,23 @@
       e.stopPropagation();
       const val = parseFloat(e.target.value) / 100;
       setPlayerVolume(val);
+    });
+  }
+
+  var volIconBtn = document.querySelector(".deck-vol-wrap .vol-icon");
+  var prevUnmutedVol = 0.8;
+  if (volIconBtn) {
+    volIconBtn.style.cursor = "pointer";
+    volIconBtn.setAttribute("role", "button");
+    volIconBtn.setAttribute("aria-label", "Mute / Unmute");
+    volIconBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (masterVolume > 0.02) {
+        prevUnmutedVol = masterVolume;
+        setPlayerVolume(0);
+      } else {
+        setPlayerVolume(prevUnmutedVol || 0.8);
+      }
     });
   }
 
@@ -4939,7 +4971,7 @@
       if ("caches" in window) {
         caches.keys().then(function (keys) {
           keys.forEach(function (k) {
-            if (k !== "daddy-music-shell-v49") {
+            if (k !== "daddy-music-shell-v50") {
               caches.delete(k).catch(function () {});
             }
           });
