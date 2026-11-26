@@ -3538,36 +3538,41 @@ body.gate-active .console-wrapper {
   margin-bottom: 10px;
 }
 
+/* Hidden on Desktop (> 900px) */
+.mobile-slide-indicator {
+  display: none;
+}
+
 /* --------------------------------------------------------------------------
    18. RESPONSIVE BREAKPOINTS (ALL PHONES & MOBILE SCREENS <= 900px)
    -------------------------------------------------------------------------- */
 @media (max-width: 900px) {
-  /* Prevent horizontal overflow on entire mobile document */
+  /* Viewport-Locked Mobile App Shell (Zero Whole-Page Vertical Scroll) */
   html,
   body {
     width: 100% !important;
     max-width: 100vw !important;
-    overflow-x: hidden !important;
-    height: auto !important;
-    min-height: 100vh !important;
-    min-height: 100dvh !important;
+    overflow: hidden !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    overscroll-behavior: none !important;
   }
 
-  /* Viewport Height & Safe-Area Foundation */
+  /* Pinned Top Header + Full-Screen Swipe Track Shell */
   .app,
   .app-shell,
   .console-wrapper {
     width: 100% !important;
     max-width: 100vw !important;
-    height: auto !important;
-    min-height: 100vh !important;
-    min-height: 100dvh !important;
-    max-height: none !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    -webkit-overflow-scrolling: touch !important;
-    padding: max(8px, env(safe-area-inset-top, 8px)) 0 calc(18px + env(safe-area-inset-bottom, 12px)) !important;
-    gap: 12px !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: 100vh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: max(4px, env(safe-area-inset-top, 4px)) 0 calc(6px + env(safe-area-inset-bottom, 4px)) !important;
+    gap: 6px !important;
     margin: 0 !important;
     box-sizing: border-box !important;
   }
@@ -3641,19 +3646,22 @@ body.gate-active .console-wrapper {
     background: rgba(12, 15, 22, 0.96) !important;
   }
 
-  /* A. Compact Adaptive Top Header */
+  /* A. Compact Adaptive Pinned Top Header */
   .console-top-pill,
   .top-command-bar {
+    flex-shrink: 0 !important;
     display: flex !important;
     flex-wrap: wrap !important;
     align-items: center !important;
     justify-content: space-between !important;
-    margin: 4px 8px 0 !important;
+    margin: 2px 10px 0 !important;
     padding: 8px 10px !important;
     gap: 8px 6px !important;
     border-radius: var(--radius-xl) !important;
-    width: calc(100% - 16px) !important;
+    width: calc(100% - 20px) !important;
     box-sizing: border-box !important;
+    overflow: visible !important;
+    z-index: 60 !important;
   }
 
   /* Row 1 Left: Brand Logo + 3-bar Mini-EQ */
@@ -3796,38 +3804,73 @@ body.gate-active .console-wrapper {
     box-sizing: border-box !important;
   }
 
-  /* B. Single-Column Stacked Bento Cards */
+  /* B. Full-Screen Horizontal Swipe Panels (CSS Scroll-Snap Carousel) */
   .bento-console {
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 14px !important;
-    padding: 8px 12px calc(18px + env(safe-area-inset-bottom, 14px)) !important;
-    height: auto !important;
-    min-height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-    width: 100% !important;
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    width: 100vw !important;
     max-width: 100vw !important;
+    height: auto !important;
+    max-height: none !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 0 !important;
+    padding: 2px 0 !important;
+    margin: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scroll-snap-type: x mandatory !important;
+    scroll-behavior: smooth !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
     box-sizing: border-box !important;
   }
 
-  /* Card 1 — Mobile Player & Turntable Deck */
-  .media-deck-card {
-    height: auto !important;
-    min-height: auto !important;
-    padding: 14px 14px 16px !important;
+  .bento-console::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  /* Slide 1 (Left — Player Deck) & Slide 2 (Right — Songs / Catalog) Full-Screen Parity */
+  .media-deck-card,
+  .stream-panel-card {
+    flex: 0 0 calc(100vw - 20px) !important;
+    width: calc(100vw - 20px) !important;
+    max-width: calc(100vw - 20px) !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    margin: 0 10px !important;
+    scroll-snap-align: center !important;
+    scroll-snap-stop: always !important;
+    box-sizing: border-box !important;
     border-radius: var(--radius-xl) !important;
-    overflow: visible !important;
+  }
+
+  /* Slide 1 — Full-Screen Mobile Player & Turntable Deck */
+  .media-deck-card {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    padding: 12px 14px 12px !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    scrollbar-width: none !important;
+  }
+
+  .media-deck-card::-webkit-scrollbar {
+    display: none !important;
   }
 
   /* Top Strip: Status & Mode Switch */
   .deck-telemetry-bar {
+    flex-shrink: 0 !important;
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
     flex-wrap: nowrap !important;
-    padding-bottom: 8px !important;
-    margin-bottom: 2px !important;
+    padding-bottom: 4px !important;
+    margin-bottom: 0 !important;
   }
 
   .telemetry-badge {
@@ -3846,11 +3889,12 @@ body.gate-active .console-wrapper {
     white-space: nowrap !important;
   }
 
-  /* Fluid Turntable Scaling (Zero Horizontal Clipping) */
+  /* Fluid Turntable Scaling (Adapts Cleanly to Viewport Height & Width) */
   .deck-stage-viewport {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
     height: auto !important;
-    min-height: clamp(230px, 58vw, 290px) !important;
-    padding: 8px 0 !important;
+    padding: 4px 0 !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
@@ -3860,24 +3904,25 @@ body.gate-active .console-wrapper {
 
   .turntable-stage {
     width: 100% !important;
-    max-width: clamp(230px, 64vw, 300px) !important;
-    height: clamp(190px, 52vw, 250px) !important;
+    max-width: min(64vw, 31dvh, 280px) !important;
+    height: min(50vw, 27dvh, 235px) !important;
     transform: none !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     position: relative !important;
+    flex-shrink: 1 !important;
   }
 
   .turntable-platter {
-    width: clamp(165px, 46vw, 220px) !important;
-    height: clamp(165px, 46vw, 220px) !important;
+    width: min(48vw, 26dvh, 215px) !important;
+    height: min(48vw, 26dvh, 215px) !important;
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.78) !important;
   }
 
   .vinyl-record {
-    width: clamp(145px, 40vw, 190px) !important;
-    height: clamp(145px, 40vw, 190px) !important;
+    width: min(41.5vw, 22.5dvh, 185px) !important;
+    height: min(41.5vw, 22.5dvh, 185px) !important;
     will-change: transform;
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
@@ -3897,8 +3942,8 @@ body.gate-active .console-wrapper {
   }
 
   .vinyl-label {
-    width: clamp(62px, 17vw, 82px) !important;
-    height: clamp(62px, 17vw, 82px) !important;
+    width: min(17.5vw, 9.5dvh, 78px) !important;
+    height: min(17.5vw, 9.5dvh, 78px) !important;
     box-shadow: none !important;
   }
 
@@ -3907,23 +3952,24 @@ body.gate-active .console-wrapper {
   }
 
   .turntable-halo-canvas {
-    width: clamp(230px, 64vw, 300px) !important;
-    height: clamp(230px, 64vw, 300px) !important;
+    width: min(66vw, 35dvh, 285px) !important;
+    height: min(66vw, 35dvh, 285px) !important;
   }
 
   .tonearm-assembly {
-    right: -12px !important;
+    right: -10px !important;
     top: 2px !important;
-    height: clamp(155px, 43vw, 210px) !important;
-    width: clamp(65px, 18vw, 85px) !important;
+    height: min(40vw, 22dvh, 195px) !important;
+    width: min(16vw, 9dvh, 78px) !important;
     transform: scale(0.85) !important;
     transform-origin: top right !important;
   }
 
   /* Synced Lyrics Pill */
   .inline-lyrics-ticker {
-    margin-top: 12px !important;
-    margin-bottom: 12px !important;
+    flex-shrink: 0 !important;
+    margin-top: 8px !important;
+    margin-bottom: 2px !important;
     padding: 6px 14px !important;
     font-size: 12px !important;
     max-width: 92% !important;
@@ -3986,12 +4032,25 @@ body.gate-active .console-wrapper {
     height: 22px !important;
   }
 
+  /* Title & Action Row fixed height flex */
+  .deck-metadata-row {
+    flex-shrink: 0 !important;
+  }
+
   /* Touch-Friendly Scrubber */
   .deck-scrubber-wrap {
+    flex-shrink: 0 !important;
     width: 100% !important;
-    margin-top: 10px !important;
+    margin-top: 6px !important;
     margin-bottom: 2px !important;
     contain: layout style !important;
+  }
+
+  .full-width-seek,
+  #seekContainer,
+  #seekTrack,
+  #volSlider {
+    touch-action: none !important;
   }
 
   .full-width-seek {
@@ -4018,11 +4077,12 @@ body.gate-active .console-wrapper {
 
   /* Transport Row & Minimalist Controls */
   .deck-single-row-console {
+    flex-shrink: 0 !important;
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
     width: 100% !important;
-    margin-top: 10px !important;
+    margin-top: 6px !important;
     padding: 2px 0 !important;
     gap: 6px !important;
   }
@@ -4064,19 +4124,16 @@ body.gate-active .console-wrapper {
     width: 48px !important;
   }
 
-  /* C. Card 2 — Mobile Catalog, Queue & Playlists Panel */
+  /* C. Slide 2 — Full-Screen Mobile Catalog, Queue & Playlists Panel */
   .stream-panel-card {
-    height: auto !important;
-    min-height: 420px !important;
-    max-height: 68dvh !important;
-    padding: 14px 12px 16px !important;
+    padding: 12px 12px 10px !important;
     display: flex !important;
     flex-direction: column !important;
     overflow: hidden !important;
-    border-radius: var(--radius-xl) !important;
   }
 
   .stream-tabs-bar {
+    flex-shrink: 0 !important;
     margin-bottom: 8px !important;
     padding: 3px !important;
   }
@@ -4088,10 +4145,12 @@ body.gate-active .console-wrapper {
 
   /* Horizontally Scrollable Filter Row */
   .stream-filters-row {
+    flex-shrink: 0 !important;
     display: flex !important;
     overflow-x: auto !important;
     overflow-y: hidden !important;
     -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-x: contain !important;
     scrollbar-width: none !important;
     padding-bottom: 6px !important;
     margin-bottom: 8px !important;
@@ -4112,6 +4171,7 @@ body.gate-active .console-wrapper {
 
   /* Responsive Stream Pane Header */
   .stream-pane-header {
+    flex-shrink: 0 !important;
     display: flex !important;
     flex-wrap: wrap !important;
     align-items: center !important;
@@ -4147,10 +4207,12 @@ body.gate-active .console-wrapper {
     gap: 4px !important;
   }
 
-  /* Internal Momentum Scrolling */
+  /* Internal Momentum Scrolling inside Slide 2 */
   .track-list.stream-track-list {
     flex: 1 1 0 !important;
     min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
     overflow: hidden !important;
   }
 
@@ -4161,7 +4223,73 @@ body.gate-active .console-wrapper {
     min-height: 0 !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-y: contain !important;
     contain: content !important;
+  }
+
+  /* Sleek Bottom 2-Dot Page Indicator Pill (Player • Songs) */
+  .mobile-slide-indicator {
+    flex-shrink: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    align-self: center !important;
+    gap: 8px !important;
+    height: 28px !important;
+    padding: 2px 12px !important;
+    margin: 2px auto 0 !important;
+    border-radius: var(--radius-full) !important;
+    background: rgba(18, 20, 28, 0.72) !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    z-index: 45 !important;
+    box-sizing: border-box !important;
+  }
+
+  .slide-dot-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 2px 6px !important;
+    margin: 0 !important;
+    color: rgba(255, 255, 255, 0.56) !important;
+    font-size: 11.5px !important;
+    font-weight: 500 !important;
+    font-family: var(--font-ui) !important;
+    cursor: pointer !important;
+    transition: color 0.2s ease !important;
+    touch-action: manipulation !important;
+  }
+
+  .slide-dot-btn.active {
+    color: #FFFFFF !important;
+    font-weight: 700 !important;
+  }
+
+  .slide-dot {
+    width: 6px !important;
+    height: 6px !important;
+    border-radius: 50% !important;
+    background: rgba(255, 255, 255, 0.35) !important;
+    transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease !important;
+  }
+
+  .slide-dot-btn.active .slide-dot {
+    background: var(--dynamic-accent, #22c55e) !important;
+    box-shadow: 0 0 8px var(--dynamic-glow, rgba(34, 197, 94, 0.65)) !important;
+    transform: scale(1.25) !important;
+  }
+
+  .mobile-slide-indicator.playing #slideBtnPlayer .slide-dot {
+    background: var(--dynamic-accent, #22c55e) !important;
+    animation: ledPulse 1.6s infinite ease-in-out !important;
+  }
+
+  .slide-sep {
+    color: rgba(255, 255, 255, 0.28) !important;
+    font-size: 10px !important;
+    user-select: none !important;
   }
 
   /* Touch-Optimized Track Rows */
@@ -4358,7 +4486,7 @@ body.gate-active .console-wrapper {
   }
 
   .deck-stage-viewport {
-    min-height: 220px !important;
+    min-height: 0 !important;
   }
 
   .mode-tab {
