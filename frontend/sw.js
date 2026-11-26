@@ -1,4 +1,4 @@
-const SHELL_CACHE = "daddy-music-shell-v52";
+const SHELL_CACHE = "daddy-music-shell-v53";
 
 const SHELL_ASSETS = [
   "./",
